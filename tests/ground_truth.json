@@ -1,0 +1,97 @@
+{
+  "morph_total_combinations": 108,
+  "morph_feasible_combinations": 68,
+  "morph_best_combination": {
+    "energy_storage": "A1",
+    "guide_method": "B2",
+    "end_fixation": "C3",
+    "material": "D3"
+  },
+  "morph_best_score": 33,
+
+  "axiomatic_coupling_true": {
+    "X": "decoupled",
+    "Z": "uncoupled",
+    "Y": "coupled"
+  },
+  "axiomatic_info_bits_true": {
+    "X": 0.0240,
+    "Z": 0.1676
+  },
+  "axiomatic_info_tol_bits": 0.01,
+  "axiomatic_recommended_design_true": "X",
+
+  "spring_x_star_true": [1.407393, 9.380275, 10.280554],
+  "spring_f_star_true": 675.593123,
+  "spring_treatment_true": "peened",
+  "spring_temper_temp_C_true": 370.0,
+  "charpy_min_toughness_J": 15.0,
+  "spring_f_star_tol_rel": 0.02,
+  "spring_constraint_tol": 0.02,
+  "composite_cte_eff_true": 9.098065e-06,
+  "composite_cte_eff_tol": 1e-7,
+  "composite_density_true": 7073.2,
+  "composite_density_tol": 0.1,
+
+  "freq_operating_hz": 20.0,
+  "freq_safety_margin": 15.0,
+  "freq_floor_hz": 300.0,
+  "natural_frequency_hz_true": 586.275156,
+  "natural_frequency_hz_tol_rel": 0.02,
+
+  "process_robustness_dd_mm_true": 0.015,
+  "process_robustness_dn_true": 0.2,
+
+  "basquin_fatigue_strength_coefficient_Nmm2": 1650.0,
+  "basquin_fatigue_strength_exponent": -0.09,
+  "rated_qualification_cycles": 50000,
+
+  "freq_alt_cost_cap_multiplier": 1.15,
+  "freq_alternative_differs_true": true,
+
+  "freq_alt_infinite_d_star_true": 1.580261,
+  "freq_alt_infinite_D_star_true": 14.0,
+  "freq_alt_infinite_Na_star_true": 4.915110,
+  "freq_alt_infinite_cost_true": 715.823441,
+  "freq_alt_infinite_natural_frequency_hz_true": 618.120786,
+
+  "freq_alt_finite_d_star_true": 1.542569,
+  "freq_alt_finite_D_star_true": 14.0,
+  "freq_alt_finite_Na_star_true": 4.462688,
+  "freq_alt_finite_cost_true": 637.458189,
+  "freq_alt_finite_natural_frequency_hz_true": 664.547234,
+
+  "freq_alt_cost_tol_rel": 0.02,
+  "freq_alt_fn_tol_rel": 0.02,
+
+  "taguchi_G_Nmm2": 80000.0,
+  "taguchi_sn_by_run_true": {
+    "1": 32.04, "2": 30.46, "3": 29.54,
+    "4": 32.82, "5": 31.64, "6": 34.97,
+    "7": 33.63, "8": 38.06, "9": 35.14
+  },
+  "taguchi_sn_tol_db": 0.05,
+  "taguchi_factor_level_sn_avg_true": {
+    "A": {"1": 30.682, "2": 33.141, "3": 35.61},
+    "B": {"1": 32.83, "2": 33.387, "3": 33.217},
+    "C": {"1": 35.024, "2": 32.807, "3": 31.603}
+  },
+  "taguchi_most_robust_levels_true": {"A": 3, "B": 2, "C": 1},
+  "taguchi_most_robust_k_true": 4.7407,
+  "taguchi_most_robust_k_tol": 0.02,
+  "taguchi_target_k_Nmm": 6.0,
+  "taguchi_loss_coefficient": 2.5,
+  "taguchi_most_robust_loss_true": 3.9643,
+  "taguchi_best_on_target_run_true": 7,
+  "taguchi_best_on_target_levels_true": {"A": 3, "B": 1, "C": 3},
+  "taguchi_best_on_target_loss_true": 0.7236,
+  "taguchi_loss_tol": 0.05,
+  "taguchi_most_robust_equals_best_on_target_true": false,
+
+  "pareto_feasible_candidates_true": ["Q4", "Q5", "Q6", "Q7", "Q8"],
+  "pareto_optimal_candidates_true": ["Q4", "Q5", "Q6", "Q7"],
+  "pareto_weights": {"cost": 0.45, "durability": 0.35, "frequency_margin": 0.20},
+  "pareto_topsis_winner_true": "Q7",
+  "pareto_weighted_sum_winner_true": "Q6",
+  "pareto_methods_agree_true": false
+}

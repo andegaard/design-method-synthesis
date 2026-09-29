@@ -1,0 +1,86 @@
+{
+  "sub_functions": {
+    "energy_storage": {
+      "A1": {
+        "name": "helical compression spring",
+        "score": 8
+      },
+      "A2": {
+        "name": "helical extension spring",
+        "score": 6
+      },
+      "A3": {
+        "name": "torsion spring",
+        "score": 5
+      },
+      "A4": {
+        "name": "elastomer pad",
+        "score": 4
+      }
+    },
+    "guide_method": {
+      "B1": {
+        "name": "rod-guided (internal guide rod)",
+        "score": 9
+      },
+      "B2": {
+        "name": "hole-guided (external sleeve)",
+        "score": 7
+      },
+      "B3": {
+        "name": "unguided (free-standing)",
+        "score": 4
+      }
+    },
+    "end_fixation": {
+      "C1": {
+        "name": "plain ends",
+        "score": 3
+      },
+      "C2": {
+        "name": "squared ends",
+        "score": 6
+      },
+      "C3": {
+        "name": "squared-and-ground ends",
+        "score": 9
+      }
+    },
+    "material": {
+      "D1": {
+        "name": "Ni-alloy-matrix particulate composite wire (low reinforcement)",
+        "score": 6
+      },
+      "D2": {
+        "name": "Fe-alloy-matrix particulate composite wire (high reinforcement)",
+        "score": 5
+      },
+      "D3": {
+        "name": "Fe-Cr-alloy-matrix particulate composite wire (moderate reinforcement)",
+        "score": 9
+      }
+    }
+  },
+  "excluded_pairs": [
+    [
+      "A4",
+      "B1"
+    ],
+    [
+      "A4",
+      "C3"
+    ],
+    [
+      "A3",
+      "C2"
+    ],
+    [
+      "A3",
+      "C3"
+    ],
+    [
+      "D3",
+      "B1"
+    ]
+  ]
+}

@@ -1,0 +1,2450 @@
+<gold_standard_template>
+<!-- Source Template: archard-hallpetch2 -->
+
+<file path="instruction.md">
+# Microstructure-Wear Analysis of an Unidentified Low-Alloy Steel
+
+From raw instrument output in `/app/data`, determine the quantities below for two cylinder specimens of one unidentified low-alloy steel, then produce the two deliverables specified. Each cylinder is tested against a fixed, unanalyzed counterface block on a rotating-cylinder wear rig; only the cylinder specimens are characterized.
+
+## Data
+
+All inputs are raw instrument output in `/app/data`.
+
+- `edx_spectrum_a.csv`, `edx_spectrum_b.csv` — raw EDX spectra of the two specimens (Be-windowed Si(Li); light elements are below the detection limit and must not be reported).
+- `edx_calibration.csv` — EDX calibration: analytical line energies, K-beta/K-alpha intensity ratios, relative sensitivity factors, and reference resolution rows.
+- `microstructure_a.png`, `microstructure_b.png` — etched optical micrographs of the ferrite grain structure. Image scale: 0.5 micrometer per pixel.
+- `wear_surface_a.csv`, `wear_surface_b.csv` — raw optical-profilometry height maps of the two wear scars; heights on a uniform grid relative to the instrument datum.
+- `material_database.csv` — candidate low-alloy steel grades with per-element composition windows (wt%), Hall-Petch constants H0 (HV) and k (HV·mm^(1/2)), and a critical surface-layer thickness (um) per grade.
+- `test_rig_geometry.csv` — wear-rig geometry: cylinder diameter, counterface block contact length, rotational speed.
+- `contact_temperature_log_a.csv`, `contact_temperature_log_b.csv` — thermocouple trace of contact-zone temperature during each specimen's wear test.
+- `surface_layer_reference.csv` — isothermal calibration: measured surface-layer thickness vs. time, at several reference grain sizes and temperatures.
+
+## Quantities to determine
+
+Define and report, once each:
+
+- Grain size: mean linear intercept L (um, ASTM E112) and mean grain diameter d = 1.128 * L (mm).
+- Hardness: Hall-Petch H = H0 + k * d^(-1/2), d in mm, H in HV, from the identified grade's constants.
+- Worn volume V (mm^3): deficit below the undamaged reference surface over the scar, excluding debris, containment, and transferred material. Specific wear coefficient k = V / (Fn * s), Fn = 40 N, s = 6000 m.
+- Archard: report both closure products k*H and their relative mismatch. If the two closure products do not closely agree, account for the unexplained portion (see `archard.residual_accounting` in Deliverables).
+
+## Deliverables
+
+Write two files:
+
+1. `/app/output/material_report.json` — JSON with exactly these top-level keys:
+
+   - `material_identification` (object) with keys:
+     - `grade` — string, the identified grade name exactly as in `material_database.csv`
+     - `composition_wt_pct` — object, element: wt%, Fe by balance
+     - `detected_elements` — list of element symbols: every element with wt% >= 0.1, and always including Si
+     - `compositions_consistent_between_specimens` — bool
+     - `edx_method` — string
+     - `hall_petch` — object with `H0_HV` and `k_HV_mm_half`
+   - `microstructure` (object) with `specimen_a` and `specimen_b`, each with `mean_intercept_um` and `d_mm`, plus `method`
+   - `hardness` (object) with `specimen_a_HV`, `specimen_b_HV`, and `relation` — a string containing `Hall-Petch` giving the relation used (form as in Quantities)
+   - `wear` (object) with `test_conditions` (`normal_force_n`, `sliding_distance_m`) and `specimen_a` / `specimen_b`, each with `volume_loss_mm3` and `wear_coefficient_mm3_Nm`
+   - `archard` (object) with `closure_product_kA_HA`, `closure_product_kB_HB`, `closure_relative_mismatch`, `k_ratio_coarse_over_fine`, `hardness_ratio_fine_over_coarse`, `explanation` — a paragraph (must exceed 180 characters) explaining why the fine-grained specimen wears less, explicitly mentioning `Hall-Petch`, `grain refinement`, `harder`, `wears less`, `k*H`, and the two numeric k*H products — and, if the two closure products do not closely agree, `residual_accounting`: an object with `specimen_a` / `specimen_b`, each with `mechanism` (string, briefly stating what you believe accounts for the gap), `magnitude` (number), and `unit` (string, an SI or SI-prefixed unit of length) for a quantity, derived from data not used elsewhere in this task, that plausibly accounts for the portion of the mismatch not explained by Hall-Petch/Archard alone.
+   - `methods` — object with a method string per stage: `composition`, `grade`, `grain_size`, `hardness`, `wear_volume`, `wear_coefficient` (exactly `k = V / (Fn * s)`), and `archard`
+
+2. `/app/output/findings.md` — markdown summary using exactly these section headings, reproducing the reported numbers (grain sizes, hardness, wear volumes, k values, closure products and mismatch, and any residual-accounting quantities reported): `## Composition/grade`, `## Grain size & hardness`, `## Wear`, `## Archard closure & mechanism`. Numbers may be formatted as any faithful decimal representation; no method name is required or checked. The Archard section must state the direction of causation using the literal tokens `grain refinement`, `harder`, and `wears less`.
+
+## Grading
+
+The two files are machine-graded against the reference. Every reported value must be computed from the data, respect the relations defined in Quantities, and resolve to exactly one grade in `material_database.csv`. The deliverable schema above states the exact requirements enforced.
+
+Do not modify any file in `/app/data`.
+
+You have 3600 seconds to complete this task. Do not cheat by using online solutions or hints specific to this task.
+</file>
+
+<file path="README.md">
+# Microstructure-Wear Analysis of an Unidentified Low-Alloy Steel
+
+A failure-analysis task: from raw scanning-electron EDX spectra, etched optical
+micrographs, optical-profilometry wear scans, and rig thermocouple/calibration
+data for two cylinder specimens of one steel run on a block-on-cylinder wear
+rig, recover each specimen's composition and grade, grain size, hardness, and
+wear coefficient, and reconcile the wear behavior through the Archard and
+Hall-Petch relations plus a second, unnamed mechanism the data itself forces
+into view (see Oxidative wear mechanism below).
+
+## Difficulty
+
+The task is a coupled measurement chain in which every stage feeds the next,
+so errors compound: quantified composition determines the grade, the grade's
+Hall-Petch constants turn a measured grain size into hardness, and the
+hardness and measured wear coefficients feed a joint Archard closure check —
+but that closure is deliberately **not** expected to come out clean. One
+specimen's true wear rate carries a genuine excess beyond what Hall-Petch/
+Archard alone predicts (see Oxidative wear mechanism), so an agent that only
+reproduces the classical chain will report a real, large closure mismatch
+without knowing why. Resolving it requires noticing that the task also
+supplies a rig-geometry file, two contact-temperature logs, and an isothermal
+oxide-growth calibration table — unremarked upon in the instructions — and
+working out that they combine (via each specimen's own already-measured grain
+size) into a second wear-relevant quantity. Earning this requires handling
+artifact-laden raw-data stages correctly across the whole chain: an additive
+photon-counting EDX background, detector escapes and pile-up peaks, Fe/Mn/Cr
+K-alpha/K-beta line overlaps, etched-grain micrographs with debris,
+profilometry with specimen tilt, containment boundaries, and debris spikes
+and dropouts, and now also a joint Arrhenius/grain-size fit against noisy
+isothermal calibration data. None of the values can be copied: the spectra,
+micrographs, surfaces, temperature logs, and calibration curves are synthetic
+per instance and unsearchable online, and the task gives the instrument facts
+and the quantity definitions rather than a recipe, so an agent must choose a
+defensible analysis rather than transcribe one.
+
+In practice this work is done by failure-analysis metallurgists and materials
+engineers in electron-microscopy, metallography, and tribology laboratories.
+The synthetic data is realistic: calibrated Si(Li) detector line shapes and
+sensitivities, Poisson spectra on a real EDS background model, equiaxed ferrite
+grain mosaics at a realistic optical scale, parametric block-on-cylinder wear
+scars with instrument-level artifacts, a thermocouple trace with a realistic
+ramp-to-steady-state profile, and an isothermal oxide-growth calibration table
+with realistic measurement noise, all at tolerances tight enough that only
+genuinely correct analyses converge.
+
+## Reference solution
+
+The reference implementation is `solution/solve.py`, and its strategy is:
+
+- **EDX quantification.** Remove the continuum (SNIP background estimation),
+  then fit Gaussian K-alpha lines at the calibration line energies, with peak
+  widths scaled from the calibration's reference Mn K-alpha FWHM and an
+  energy-dependent detector-width law (`sigma ~ E^0.6`), not from a per-line
+  constant. Resolve the Mn K-alpha / Cr K-beta overlap by fitting both lines
+  jointly using the tabulated K-beta/K-alpha intensity ratios. Apply relative
+  sensitivity factors, sum K-alpha + K-beta areas, and report wt% with Fe by
+  balance. Light elements below the detection window must be excluded from the
+  reported set and from grade matching.
+- **Grade identification.** Match the quantified composition against the
+  composition windows in `material_database.csv`; the correct grade also
+  supplies the Hall-Petch constants used downstream. `material_database.csv`
+  includes a close neighbor grade (AISI 4142) whose Mn/Mo windows sit just
+  outside the true composition, so a grossly inflated Mn or depressed Mo
+  reading misidentifies the grade. Tested against a valley-to-valley,
+  non-deconvolved composition estimate (see Verification), this neighbor does
+  not discriminate: a reasonably competent quantification that skips explicit
+  Mn K-alpha/Cr K-beta peak separation still lands close enough to the true
+  composition to resolve to AISI 4140. Composition/grade identification is not
+  currently a reliable difficulty driver on its own; grain size and wear
+  volume are (see Verification). This was quantified directly (not just
+  observed once): on the shipped spectra, skipping the Cr-K-beta-under-Mn-
+  K-alpha subtraction entirely biases Mn by only about **+0.03 wt%**, smaller
+  than the reference pipeline's *own* legitimate SNIP/width-parameter
+  sensitivity (worst observed **0.113 wt%**, see the 54-member sweep below).
+  Since a real defect (skipping deconvolution) moves the answer less than the
+  reference method's own accepted parameter noise, no tolerance or decoy-grade
+  placement can separate the two without also rejecting valid parameter
+  choices of the reference method itself — this is a property of the current
+  line-overlap magnitude and grade-window spacing, not a calibration
+  oversight. Widening the gap (e.g. raising true Cr toward the AISI 4140
+  window's ceiling to raise the Kbeta contamination under Mn-Kalpha) was
+  evaluated and shown to help, but only marginally and by riding the edge of
+  the composition window; it was not adopted because it would trade a
+  well-understood non-discrimination for a fragile, barely-passing one.
+- **Grain size.** Threshold the etched grain boundaries (Otsu), reject small
+  blobs that are debris rather than grains, apply the ASTM E112 mean-linear-
+  intercept method, and convert with `d = 1.128 * L` at the declared
+  0.5 um/px scale, reporting L in um and d in mm.
+- **Hardness.** Hall-Petch `H = H0 + k * d^(-1/2)` with the identified grade's
+  constants and the measured grain sizes.
+- **Wear volume.** Fit a robust reference plane to the undamaged plateau
+  (iterative MAD-trimmed linear fit that removes specimen tilt and is immune to
+  isolated debris and to transferred material piled beside the scar), exclude
+  that transfer shoulder from the baseline, then integrate the deficit
+  `V = integral (reference_height - z) dxdy` over the worn region (6 um depth
+  threshold plus minimum-blob filter on the void); then `k = V / (Fn * s)`.
+- **Archard closure.** Report both closure products `k*H` and their relative
+  mismatch. With identical composition and test conditions, a clean single-
+  mechanism Archard picture would predict `k*H` equal across specimens — but
+  the true mismatch here is large (~28%, see Oxidative wear mechanism), so
+  faithfully reporting the measured mismatch (not forcing it toward zero) is
+  itself part of correct measurement.
+- **Residual accounting (conditional).** Only triggered by the solver's own
+  numbers: since the two closure products do not closely agree, quantify what
+  accounts for the gap using data untouched by any stage above (rig geometry,
+  per-specimen contact-temperature logs, an isothermal oxide-growth reference
+  table). Read each specimen's steady-state contact temperature from its
+  thermocouple log (mean of samples after the initial ramp); fit a grain-size-
+  dependent parabolic growth law `X^2 = k0 * exp(-Q/RT) * d^(-n) * t` to
+  `surface_layer_reference.csv` by linear regression on `ln(X^2/t)` vs. `1/T`
+  and `ln(d)`; evaluate it at each specimen's own contact temperature and
+  already-measured grain size over the non-contact portion of one rig
+  revolution (from `test_rig_geometry.csv`: revolution period minus contact
+  dwell time, both derived from cylinder circumference, rotational speed, and
+  counterface block contact length). Report this as `archard.residual_
+  accounting.{specimen}.magnitude`/`unit`, alongside a brief (ungraded)
+  `mechanism` note. Use the identical-chemistry, differing-grain-size
+  Hall-Petch hardness difference to explain why the fine-grained specimen
+  wears less in the classical sense, independent of whether the closure
+  itself is clean.
+
+The verifier gates are deliberately insensitive to the inner constants of
+these steps (SNIP window, width-model exponent, thresholds, sigma-bands);
+tolerances are calibrated empirically (see below), so a faithful analysis of a
+range of parameter choices within the standard methods converges.
+
+## Verification
+
+The verifier (`tests/test_outputs.py`) grades only the two artifact files —
+`/app/output/material_report.json` and `/app/output/findings.md` — and is
+divided into structural checks and numeric gates.
+
+- **Structure & conventions.** Both files exist; all required JSON keys are
+  present with the correct types; `findings.md` uses the four contracted section
+  headings and reproduces the report numbers in any faithful decimal format;
+  test conditions are exactly Fn = 40 N, s = 6000 m; `methods.wear_coefficient`
+  is exactly `k = V / (Fn * s)`; `hardness.relation` contains `Hall-Petch`; the
+  `explanation` field is longer than 180 characters and contains the literal
+  markers `Hall-Petch`, `grain refinement`, `harder`, `wears less`, `k*H`, and
+  two numeric k-H products. No method-name vocabulary is required in
+  `findings.md` — only the four headings, the causal direction, and the reported
+  numbers.
+- **Composition.** Detected element set must equal the reference resolved set,
+  `compositions_consistent_between_specimens` must be true, and the
+  grade-discriminating elements must lie within their per-element tolerances —
+  **Mn ±0.18, Cr ±0.05, Mo ±0.10 wt%**, Fe within **±1.5 wt%** (Si ~0.15 wt%
+  sits near the detection floor and is required in the detected set but not
+  tolerance-graded); grade and Hall-Petch constants must match the database
+  exactly. The reference chemistry is deliberately offset from both the 4140
+  grade-window midpoints and published nominal values, so window-midpoint or
+  textbook reporting misses at least one gate.
+- **Grain size.** `d_mm` within **±15%** of the reference grain size, and
+  internally consistent with the reported mean intercept
+  (`d = 1.128 * L`, within 2%).
+- **Hardness.** Hall-Petch recomputed from the agent's own grain size within
+  **±3%**, and within **±6%** of the reference hardness.
+- **Wear.** `k = V/(Fn.s)` internally (within 0.1%) and within **±2%** of the
+  reference wear coefficient.
+- **Residual accounting.** Required only when the report's *own* wear/hardness
+  values (already independently graded above) recompute a closure mismatch
+  exceeding an undisclosed internal threshold — `instruction.md` only says
+  the two closure products "do not closely agree," never a number. The
+  trigger is computed from those already-graded fields, never from the
+  agent's self-reported `closure_relative_mismatch`, so it cannot be gamed by
+  writing a small number into that field. When required, `archard.
+  residual_accounting.{specimen}.magnitude` (converted from its reported
+  unit) must be within **±20%** of the reference value.
+- **Archard.** Reported closure mismatch (`|kA*HA - kB*HB| / mean`) within
+  **±5 percentage points (absolute)** of the *true* mismatch — not required
+  to be small, since the true mismatch is genuinely large (see Oxidative wear
+  mechanism); the coarse specimen wears more and is softer than the fine one;
+  the two reported ratios reproduce the reported k and H values (within 1%);
+  `findings.md` states the causal direction (grain refinement -> higher
+  hardness -> less wear).
+
+Tolerances are sized from two separate kinds of evidence, and this section is
+explicit about which gates each kind supports.
+
+First, a 54-member sensitivity sweep over the reference solver's configurable
+constants (SNIP windows 8-24, width-model exponents 0.5 and 0.6, +/-3% FWHM
+scale, three baseline exclusion bands). This sweep shares every structural
+step with the reference implementation — it is a parameter-sensitivity study
+of one pipeline, not independent implementations, and is not treated as
+evidence of method discrimination. Within the sweep, all members identify
+AISI 4140 and stay within their per-element composition gates (worst observed
+deviations: Mn 0.113, Cr 0.031, Mo 0.086, Si 0.187 [ungated] wt%). Off-family
+attacks fail: window-midpoint reporting (Mn/Cr deviations 0.35 wt%) and
+published textbook 4140 values (Mn 0.25, Cr 0.25, Mo 0.14 wt% deviations).
+
+Second, two structurally independent implementations, built separately from
+`solve.py` and *not* sharing its pipeline, were run against the real data
+files to check the wear/closure gates and the composition/grade gates
+respectively:
+
+- A **per-row plane leveling** wear-volume calculation (fits each profilometry
+  row independently with iterative outlier rejection, rather than the
+  reference's single global 2D plane) recovered k within 0.15-0.2% of the true
+  wear coefficient on both specimens when checked against the pre-oxidation
+  design point. This is genuine independent-implementation evidence that the
+  **2%** wear-k gate admits a differently structured correct method, not just
+  parameter variants of one implementation. Wear volumes computed without
+  removing scan tilt at all, or without excluding the transfer shoulder from
+  the baseline, still fail badly (+15%/+36% territory) and are rejected as
+  intended. The closure-mismatch figure this check originally produced
+  (~2.0%) predates specimen A's wear-volume increase for the oxidative-wear
+  mechanism (see Oxidative wear mechanism) and is now stale for that specific
+  number; the wear-coefficient precision itself does not depend on the
+  absolute groove depth, but re-running this check against the regenerated
+  `wear_surface_a.csv` to reconfirm the **2%** k-gate still holds at the new
+  depth is recommended before relying on it further.
+- A **valley-to-valley, non-deconvolved EDX integration** (linear local
+  background between the peak's flanking valleys, no joint Mn K-alpha/Cr
+  K-beta fit) recovers Mn/Cr/Mo within 0.01-0.06 wt% of true and resolves to
+  AISI 4140 without tripping the AISI 4142 neighbor. This is the honest
+  negative result: composition/grade identification, as currently calibrated,
+  does **not** discriminate between careful peak deconvolution and a simpler
+  valley-integration approach on this dataset — the task's difficulty here
+  currently rests on grain size and wear volume, not on forcing the Mn/Cr
+  overlap to be resolved. (A non-energy-scaled constant detector width and a
+  plane fit that merely includes debris and transfer shoulders do not
+  themselves fail the composition/wear gates; those are not claimed as
+  discriminations either.)
+
+  **Root cause, quantified.** A follow-up review reproduced this gap
+  numerically using the same background-removal and single-Gaussian fitting
+  machinery as `solve.py`, but skipping only the Fe/Cr-Kbeta subtraction step
+  (i.e. isolating exactly the joint-deconvolution step as the variable). On
+  the real shipped spectra (both specimens, seeds 4101/4102) this "skip the
+  overlap correction" method biases Mn by **+0.029 to +0.031 wt%** — smaller
+  than the reference pipeline's own worst-case parameter-sweep deviation
+  (**0.113 wt%**, see above) and less than a fifth of the **0.15 wt%** gap
+  from the true composition (Mn 0.60) to the AISI 4142 decoy's Mn window
+  (≥0.75). A noiseless systematic-bias check attributes this to the specific
+  physics here: Cr's Kbeta line (5.947 keV) carries only ~15% of Mn Kalpha's
+  (5.895 keV) area at the current true Cr level (0.70 wt%), and a fixed-
+  position/fixed-width single-Gaussian fit absorbs only part of that
+  neighboring peak rather than double-counting it outright. Raising true Cr
+  toward the top of AISI 4140's window (1.3-1.5 wt%) scales the naive bias up
+  (to roughly +0.10 to +0.17 wt% in a noiseless estimate), but the real,
+  noisy-spectrum gain is smaller and would leave the decoy trigger sitting at
+  the edge of the reference method's own sweep ceiling — a fragile, marginal
+  fix rather than a robust one. No data files were changed based on this
+  finding; it is recorded here as the quantified version of the negative
+  result above, for anyone considering re-tuning this stage.
+
+**Grain-size and hardness gates.** The 54-member sweep varies no
+grain-size parameter, so these gates are calibrated by the reference
+solver's own errors on the real data rather than by a swept band. Its
+measured grain sizes deviate by **−4.7%** (specimen A) and **+8.6%**
+(specimen B) from the reference values, against the **±15%** gate (worst
+8.6%, ~6.4 points of headroom); its Hall-Petch hardnesses deviate by
+**+1.1%** and **−2.5%**, against the **±6%**-of-reference gate (worst 2.5%)
+and the **±3%** self-consistency gate (the hardness recomputed from the
+agent's own reported grain size must match its reported hardness). The
+intercept convention is fixed (`d = 1.128 * L`), so the remaining
+headroom tracks the grain-estimation stage (Otsu thresholding plus
+small-blob rejection) rather than the intercept rule. These deviations
+are reported as the reference method's honest operating point, not as a
+discriminator.
+
+**Closure mismatch is real, not error.** The ground-truth parameter set has
+a **27.8% intrinsic closure mismatch** (`|kA*HA - kB*HB| / mean`), because
+specimen A's true wear coefficient includes a deliberate excess beyond what
+clean Hall-Petch/Archard alone predicts (`k_a` set ~35% above the volume a
+clean closure would imply, via the worn-groove depth in
+`authoring/provenance/dataset/generate_wear_surfaces.py`). The Archard gate
+therefore checks the reported mismatch against this true, large value (within
+±5 percentage points), not against zero — a correct measurement should
+*reproduce* the mismatch, not erase it.
+
+## Oxidative wear mechanism
+
+The excess is not asserted; it is generated from the same quantity the agent
+must already compute (grain size, from the grain-size stage) and four new
+raw-data files (rig geometry, two per-specimen contact-temperature logs, and
+an isothermal oxide-growth reference table), combined through a real, cited
+physical mechanism.
+
+**Why this is a genuine judgment call, not extraction.** An earlier version
+of this mechanism put an explicit `oxidation` object in the JSON schema,
+named and described in `instruction.md`'s Quantities section — file, formula
+shape, and target quantity all handed over. That made the four new data
+files pure extraction-and-curve-fit: an agent had no reason to notice
+anything was wrong, since the task told it exactly what to compute. Worse,
+the Archard closure-mismatch gate didn't even require touching the new files
+at all — it falls straight out of composition, grain size, hardness, and
+wear volume, all already being measured for other reasons, so an agent could
+have passed every gate at the true ~28% mismatch without ever opening
+`surface_layer_reference.csv`.
+
+The current version removes the named quantity entirely. `instruction.md`
+now says only: report both closure products; *if they do not closely agree*,
+account for the unexplained portion using data not used elsewhere in this
+task (`archard.residual_accounting`: a brief mechanism note plus a magnitude
+and a length unit — no file name, formula, or physical quantity named). The
+trigger for whether that field is graded is computed server-side from the
+agent's own wear/hardness numbers (see Verification) and never disclosed as
+a number, so an agent has to actually notice its own large mismatch, infer
+from the requirement's wording that prose alone will not satisfy it, and go
+looking through files it had no other reason to open. Getting the magnitude
+right requires working out, unprompted, that the growth-reference table is a
+joint Arrhenius/grain-size fitting problem, that the rig-geometry file yields
+a per-revolution non-contact window, and that those two things combine at
+each specimen's own (already-measured) grain size and (log-derived) contact
+temperature — none of which `instruction.md` states or implies.
+
+**Why the labels are neutral.** Removing the named quantity from
+`instruction.md` (above) is not sufficient on its own if the *filenames* say
+what the schema doesn't. An earlier version of the shipped data named the
+calibration file `oxide_growth_reference.csv`, with a column literally called
+`oxide_thickness_nm`, and `material_database.csv` carried
+`oxide_critical_thickness_um`. An agent doesn't need any physical reasoning
+to notice those — it only needs to run `ls` or open the CSV header. That's a
+keyword match, not a judgment call, and it defeats the elimination reasoning
+above just as thoroughly as naming the quantity in `instruction.md` would.
+Every file and column the agent can see is now named for what is literally
+measured, not for the process believed to explain it: the file is
+`surface_layer_reference.csv` with column `layer_thickness_nm` ("measured
+surface-layer thickness vs. time, at several reference grain sizes and
+temperatures" in `instruction.md`), and `material_database.csv` carries
+`critical_layer_thickness_um` ("a critical surface-layer thickness (um) per
+grade"). Nothing here is invented or mislabeled — a real calibration table
+would be named exactly this way before anyone had committed to an
+explanation for it. What the agent still has to supply is the physical
+reasoning that turns "a bare low-alloy-steel surface, held near a steady
+contact temperature, growing a layer over time at a rate that depends on
+temperature and grain size, with a critical thickness that matters" into
+"this is almost certainly oxidation" — genuine domain knowledge, not
+something a filename hands over. The `residual_accounting.mechanism` field
+stays free-text and ungraded specifically so an agent that reasons its way
+to "oxide film," "scale," or "passivation layer" in its own words is judged
+identically: only the numeric magnitude is checked, never the vocabulary.
+
+**Physical basis.** Grain boundaries are fast diffusion paths for oxide
+scale growth ("pipe"/short-circuit diffusion); a finer-grained specimen forms
+a protective oxide film faster than a coarser one of the same chemistry.
+This is specifically documented for low-Cr steels — our alloy's Cr content
+(0.70 wt%) sits inside the regime studied:
+
+- Krupp et al., *Grain-Size Effects on the High-Temperature Oxidation
+  Behaviour of Chromium Steels* (Springer) / *The Effect of Grain-Boundary
+  Diffusion on the Oxidation of Low-Chromium Steels*, Diffusion and Defect
+  Data (2005): for steels below ~2.25 wt% Cr, increasing grain size improves
+  oxidation resistance because short-circuit grain-boundary diffusion of
+  oxygen is reduced.
+- Birks & Meier, *Introduction to High-Temperature Oxidation of Metals*
+  (Edward Arnold, 1983): the standard reference for grain boundaries as
+  diffusion short-circuits in oxide scale growth.
+- Raman, Khanna, Tiwari & Gnanamoorthy, *Oxidation of Metals* 37 (1992):
+  Fe-2.25Cr-1Mo oxidation rate found roughly inversely proportional to alloy
+  grain diameter (16 um vs. 59 um grain size -> ~2x weight-gain difference at
+  550 C, 6 h) — the `kp ~ 1/d` relation used to generate
+  `surface_layer_reference.csv`. Their reference specimens' grain size
+  (~40 um) is used as the calibration table's reference grain size.
+- Runk & Kim, *Oxidation of Metals* 2 (1970): directly measured (not
+  extrapolated) parabolic oxidation rate constants for Fe-C steel at
+  200-350 C — the right chemistry family and, critically, the right
+  *timescale* (order of hours), unlike long-term (500+ C, 1000-year)
+  extrapolation literature. This is the temperature-dependence (Arrhenius)
+  basis for `surface_layer_reference.csv`.
+- Quinn, *Tribology International* 16 (1983), "Review of oxidational wear
+  Part I": oxide films spall and are removed as wear debris once they reach
+  a critical thickness, "usually 1 to 3 um" for ferrous oxides — confirmed
+  independently in Rainforth et al., *Tribology International* 35 (2002).
+  `material_database.csv`'s `critical_layer_thickness_um` column (1.0 for
+  AISI 4140) is set at the low end of this cited range.
+
+**Why the rotating member is the specimen, not the block.** In standard
+ASTM G77 usage the stationary block is usually the examined specimen. Here
+the two analyzed specimens are instead the **rotating cylinders**, tested
+against a fixed, unanalyzed counterface block, because the mechanism depends
+on periodic reoxidation: only the rotating member's surface gets a brief
+contact pass once per revolution followed by an open-air regrowth interval;
+the stationary block is in continuous, unbroken contact and never gets that
+interval. This is a deliberate deviation from the more common G77 convention
+and is called out explicitly here so a reviewer does not read it as a mistake.
+
+**The regime-threshold framing.** Mild vs. severe wear is not "does
+accumulated oxide thickness exceed Xc by the end of the test" — it is a
+per-revolution race between the regrowth window (time between successive
+passes, minus contact dwell time, from `test_rig_geometry.csv`: a standard
+ASTM G77 ring, 34.99 mm diameter, 72 rpm dry-test condition, 6.35 mm
+counterface block contact length) and how much oxide the specimen's own
+grain size lets it regrow in that window. At the shared steady-state contact
+temperature (350 C, chosen because it is exactly where Runk & Kim's directly-
+measured low-temperature data tops out):
+
+| | grain size | regrowth per revolution | vs. Xc = 1000 nm |
+|---|---|---|---|
+| Coarse (specimen A) | 43.2 um | **645 nm** | below — cannot complete a protective cycle |
+| Fine (specimen B) | 11.1 um | **1271 nm** | above — completes a protective cycle |
+
+This is a real, non-arbitrary separation using nothing but the grain sizes
+already fixed in `tests/ground_truth.json` — it was not tuned to force a
+result; 350 C falls out of where the cited kinetics data's temperature range
+ends.
+
+**Independent validation.** Three checks were run against the real generated
+data (not just the generator's own round-trip):
+
+1. A structurally independent least-squares fit (linear regression on
+   `ln(X^2/t)` vs. `1/T` and `ln(d)`, built separately from `solve.py`)
+   against the noisy `surface_layer_reference.csv` recovers the true
+   per-revolution regrowth within **0.6-1.7%** for both specimens.
+2. `solve.py`'s own implementation, run end-to-end against the real generated
+   files, recovers **650.8 nm** (true 645.0, +0.9%) and **1273.9 nm** (true
+   1271.2, +0.2%).
+3. A later, fully independent well-specifiedness review — with no access to
+   this file's citations, formulas, or the `k0`/`Q`/`n` fit form — rebuilt the
+   fit from nothing but `surface_layer_reference.csv` and `test_rig_geometry.csv`
+   (generic Arrhenius-in-`T` / power-law-in-`d` regression, the default first
+   thing to try for oxidation kinetics) and recovered **649.1 nm** (+0.6%) and
+   **1265.7 nm** (-0.4%), with the fitted grain-size exponent landing at
+   **-0.984** against the generator's true -1. This is the strongest evidence
+   that the residual-accounting target is recoverable from the shipped
+   calibration table by standard methods, not from guessing this file's exact
+   citations or parameterization.
+
+All three land inside the **±20%** verifier tolerance with wide margin, and —
+more importantly — all three correctly place each specimen on the correct
+side of the 1000 nm critical thickness, which is the qualitatively important
+result.
+
+**Honest open point.** The critical thickness Xc is used here as a stand-in
+for "minimum viable protective coverage established within one cycle," not
+just "the thickness at which an established film eventually spalls" (Quinn's
+original sense). The literature does not cleanly separate those two
+thresholds, and no citation was found to resolve this more precisely. It
+does not threaten the current result (645 nm vs. 1271 nm split cleanly either
+side of 1000 nm), but a reviewer probing the mechanism at that level of
+detail would find this simplification, and it is disclosed here rather than
+left implicit.
+
+**What is authored, not cited.** The magnitude of specimen A's wear excess
+(~35% volume increase, giving the ~28% true closure mismatch) is a design
+choice, not a literature-derived number — full quantitative severe-wear-rate
+modeling (fraction of contact area affected, severe-wear K-coefficients) was
+not attempted, since it would require additional uncited parameters. The
+choice represents a partial/mixed transition (a fraction of contact spots
+crossing into severe wear) rather than a full regime switch, which is both
+physically plausible (real transitions are rarely switch-like) and keeps the
+resulting numbers from looking artificially dramatic.
+
+**Ground-truth provenance.** `tests/ground_truth.json` is the fixed reference
+parameter set of the seeded data generators shipped in `authoring/provenance/` and is
+reproducible byte-for-byte:
+
+```
+python3 authoring/provenance/generate_ground_truth.py
+```
+
+That script regenerates the dataset, checks it and the ground truth match the
+shipped files exactly, runs the reference solver, and confirms the verifier
+passes 15/15. See `authoring/provenance/dataset_manifest.md` for the generator
+parameters, seeds, and the reference-solver description.
+</file>
+
+<file path="task.toml">
+schema_version = "1.4"
+
+artifacts = ["/app/output/material_report.json", "/app/output/findings.md"]
+
+[task]
+name = "afterquery/archard-hallpetch"
+description = "From raw scanning-electron EDX spectra, optical micrographs and profilometry scans of two worn pins, identify each specimen's steel grade, grain size, hardness and wear coefficient and explain the wear difference via Archard and Hall-Petch."
+authors = [{ name = "Anders Gaard", email = "andegaard@gmail.com" }]
+keywords = ["metallurgy", "edx-spectroscopy", "grain-size-analysis", "hall-petch", "archard", "tribology", "python"]
+
+[metadata]
+author_name = "Anders Gaard"
+author_email = "andegaard@gmail.com"
+author_organization = "Gaard Consulting"
+author_profile = "https://github.com/andegaard"
+conflicts_of_interest = "None"
+
+category = "Science"
+subcategory = "Mechanical & Aerospace Engineering"
+difficulty_explanation = "A single coupled measurement chain (composition -> grade -> Hall-Petch hardness -> wear coefficient -> Archard closure) over six artifact-laden raw-data stages: EDX spectra on a Poisson continuum with detector escapes and pile-up peaks, etched-grain micrographs with debris, and profilometry with tilt, containment boundaries, debris spikes and dropouts. All data is synthetic per instance and unsearchable, so an agent must choose a defensible analysis rather than transcribe one. The EDX spectra do contain a Mn K-alpha/Cr K-beta line overlap, but it is not currently a discriminating difficulty driver: quantified in README.md ('Verification'), skipping its deconvolution biases Mn by less than the reference pipeline's own accepted parameter-sensitivity noise, so the difficulty load is actually carried by grain-size measurement, wear-volume integration, and the unprompted oxidative-wear inference (see solution_explanation and verification_explanation), not by composition/grade identification."
+solution_explanation = "Quantify wt% by continuum removal (SNIP background), fitting Gaussian K-alpha peaks with widths scaled by an energy-dependent detector-width law from the calibration reference FWHM, resolving the Mn K-alpha/Cr K-beta overlap jointly via tabulated K-beta/K-alpha ratios, with relative sensitivity factors and Fe by balance; match the composition to the AISI grade windows; measure grain size by Otsu thresholding plus the ASTM E112 mean-linear-intercept method (d = 1.128*L); compute Hall-Petch hardness from the identified grade's constants; fit a robust, tilt-removing reference plane to the undamaged plateau (iterative MAD trimming, immune to debris and transfer shoulders), then integrate the wear deficit V = integral(reference_height - z) over the void and set k = V/(Fn*s); verify the Archard closure k*H across the two specimens."
+verification_explanation = "The verifier reads only /app/output/material_report.json and findings.md: required JSON schema and types; the explanation field must exceed 180 characters and contain the literal markers Hall-Petch, grain refinement, harder, wears less, k*H, and two numeric k-H products; findings.md must use the four contracted headings and reproduce the report numbers in any faithful decimal; test conditions are Fn = 40 N, s = 6000 m. Numeric gates: composition within Mn 0.18 / Cr 0.05 / Mo 0.10 / Fe 1.5 wt%, grain size within 15%, hardness Hall-Petch self-consistent within 3% and within 6% of the reference, wear coefficient within 2% with k = V/(Fn*s), and Archard closure mismatch within 5 percentage points (absolute) of the true, deliberately large ~27.8% mismatch, with the correct causal direction. Calibration floors: the reference solver's own errors are d -4.7%/+8.6% vs the 15% grain gate and H +1.1%/-2.5% vs the 6% hardness gate; the ground-truth parameter set carries a genuine 27.8% intrinsic k*H mismatch (specimen A's true wear includes an authored oxidative-wear excess, see README 'Oxidative wear mechanism'), so the 5-point closure gate checks that the agent reproduces this real gap rather than erasing it toward zero."
+
+domain = "engineering-sciences"
+field = "mechanical-engineering"
+subfield = "tribology and wear testing"
+expert_time_estimate_hours = 5
+
+tags = ["metallurgy", "edx-spectroscopy", "grain-size-analysis", "hall-petch", "archard", "tribology", "python"]
+relevant_experience = "Associate professor in materials engineering"
+
+[verifier]
+timeout_sec = 300.0
+environment_mode = "separate"
+
+[verifier.environment]
+network_mode = "no-network"
+
+[agent]
+timeout_sec = 3600.0
+
+[environment]
+build_timeout_sec = 600.0
+cpus = 1
+memory_mb = 2048
+storage_mb = 10240
+gpus = 0
+network_mode = "public"
+</file>
+
+<file path="tests/Dockerfile">
+FROM python:3.13-slim-bookworm
+
+RUN apt-get update && apt-get install -y --no-install-recommends curl \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN pip install --no-cache-dir pytest==8.4.1 pytest-json-ctrf==0.3.5
+
+COPY . /tests/
+
+RUN mkdir -p /app/output
+</file>
+
+<file path="tests/test_outputs.py">
+import json
+import math
+import os
+import re
+
+import pytest
+
+OUT_FILE = os.environ.get("HARBOR_OUT_DIR", "/app/output") + "/material_report.json"
+TRUTH_FILE = os.environ.get("HARBOR_TRUTH_DIR", "/tests") + "/ground_truth.json"
+MD_FILE = os.environ.get("HARBOR_OUT_DIR", "/app/output") + "/findings.md"
+
+# Composition is graded per element: Si (0.1-0.2 wt%) sits near the detection
+# floor where counting-statistics precision dominates, so it is NOT tolerance-
+# gated (it is still required in the detected element set). Mn, Cr and Mo are
+# the grade-discriminating elements; their tolerances are sized against the
+# spread of reasonable quantification variants (SNIP m in 8..24, width-model
+# exponent 0.5/0.6) and are small enough that window-midpoint or published
+# "textbook" values of any candidate grade fall outside.
+GRADED_TOL = {"Mn": 0.18, "Cr": 0.05, "Mo": 0.10}
+TOL_FE_WT = 1.5
+TOL_D_REL = 0.15
+TOL_H_REL = 0.03
+TOL_H_TRUE_REL = 0.06
+TOL_K_REL = 0.02
+# Closure mismatch is not expected to be small: specimen A's true wear rate
+# includes a genuine excess beyond clean Hall-Petch/Archard (see
+# authoring/provenance/dataset/generate_oxidation.py), so the gate checks the
+# reported mismatch against the TRUE mismatch, not against zero.
+TOL_CLOSURE_ABS = 0.05
+
+# Trigger for requiring archard.residual_accounting: computed from the
+# report's OWN wear/hardness values (already independently tolerance-gated
+# above), never from a self-reported mismatch field, so it cannot be gamed by
+# writing a small number into closure_relative_mismatch without first failing
+# the k/H gates. Not disclosed in instruction.md -- the task only says the two
+# closure products "do not closely agree"; this is comfortably below the true
+# ~28% mismatch and comfortably above what honest measurement noise alone
+# would produce, so any submission passing the k/H gates will trip it.
+RESIDUAL_TRIGGER_ABS = 0.10
+TOL_RESIDUAL_REL = 0.20
+UNIT_TO_NM = {"nm": 1.0, "um": 1e3, "µm": 1e3, "mm": 1e6, "cm": 1e7, "m": 1e9}
+
+
+def load_report():
+    with open(OUT_FILE) as f:
+        return json.load(f)
+
+
+def load_truth():
+    with open(TRUTH_FILE) as f:
+        return json.load(f)
+
+
+def _recomputed_mismatch(data):
+    w = data["wear"]
+    hd = data["hardness"]
+    cl_a = w["specimen_a"]["wear_coefficient_mm3_Nm"] * hd["specimen_a_HV"]
+    cl_b = w["specimen_b"]["wear_coefficient_mm3_Nm"] * hd["specimen_b_HV"]
+    return abs(cl_a - cl_b) / (0.5 * (cl_a + cl_b)), cl_a, cl_b
+
+
+# ---------------------------------------------------------------------------
+def test_report_files_exist():
+    assert os.path.exists(OUT_FILE), "material_report.json not produced"
+    assert os.path.exists(MD_FILE), "findings.md not produced"
+
+
+def test_required_fields():
+    data = load_report()
+    for key in ("material_identification", "microstructure", "hardness", "wear", "archard", "methods"):
+        assert key in data, f"missing top-level key {key}"
+    mi = data["material_identification"]
+    for key in ("grade", "composition_wt_pct", "detected_elements",
+                "compositions_consistent_between_specimens", "hall_petch", "edx_method"):
+        assert key in mi, f"missing material_identification.{key}"
+    ms = data["microstructure"]
+    for sp in ("specimen_a", "specimen_b"):
+        for key in ("mean_intercept_um", "d_mm"):
+            assert key in ms[sp], f"missing microstructure.{sp}.{key}"
+    hd = data["hardness"]
+    for key in ("specimen_a_HV", "specimen_b_HV"):
+        assert key in hd, f"missing hardness.{key}"
+    w = data["wear"]
+    for sp in ("specimen_a", "specimen_b"):
+        for key in ("volume_loss_mm3", "wear_coefficient_mm3_Nm"):
+            assert key in w[sp], f"missing wear.{sp}.{key}"
+    assert data["wear"]["test_conditions"]["normal_force_n"] == 40.0
+    assert data["wear"]["test_conditions"]["sliding_distance_m"] == 6000.0
+    assert isinstance(data["archard"]["explanation"], str) and len(data["archard"]["explanation"]) > 120
+    assert isinstance(data["methods"], dict) and len(data["methods"]) >= 4
+
+
+# ---------------------------------------------------------------------------
+def _comp_deltas(data, truth):
+    rep = data["material_identification"]["composition_wt_pct"]
+    deltas = {}
+    for el, v in truth["composition_wt_pct"].items():
+        if el == "Fe":
+            continue
+        rep_v = rep.get(el, 0.0)
+        deltas[el] = abs(rep_v - v)
+    return rep, deltas
+
+
+def test_composition_element_set():
+    data = load_report()
+    truth = load_truth()
+    det = sorted(data["material_identification"]["detected_elements"])
+    assert det == sorted(truth["resolved_elements"]), (
+        f"detected element set {det} must match resolved set {sorted(truth['resolved_elements'])}"
+    )
+    assert data["material_identification"]["compositions_consistent_between_specimens"] is True
+
+
+def test_composition_wt_bounds():
+    data = load_report()
+    truth = load_truth()
+    rep, deltas = _comp_deltas(data, truth)
+    for el, d in deltas.items():
+        if el not in GRADED_TOL:
+            continue
+        tol = GRADED_TOL[el]
+        assert d <= tol, (
+            f"{el}: reported {rep[el]:.2f} wt% deviates from true "
+            f"{truth['composition_wt_pct'][el]:.2f} by {d:.2f} (> {tol})"
+        )
+    fe_err = abs(rep["Fe"] - truth["composition_wt_pct"]["Fe"])
+    assert fe_err <= TOL_FE_WT, (
+        f"Fe balance {rep['Fe']:.2f} wt% deviates from true "
+        f"{truth['composition_wt_pct']['Fe']:.2f} by {fe_err:.2f} (> {TOL_FE_WT})"
+    )
+
+
+def test_grade_identification():
+    data = load_report()
+    truth = load_truth()
+    mi = data["material_identification"]
+    assert mi["grade"] == truth["grade"], (
+        f"identified grade {mi['grade']!r} != {truth['grade']!r}"
+    )
+    hp = mi["hall_petch"]
+    assert abs(hp["H0_HV"] - truth["hall_petch"]["H0_HV"]) <= 0.01
+    assert abs(hp["k_HV_mm_half"] - truth["hall_petch"]["k_HV_mm_half"]) <= 0.01
+
+
+def test_grain_sizes():
+    data = load_report()
+    truth = load_truth()
+    g = truth["grain_size"]
+    for sp, key_d in (("specimen_a", "d_a_true_mm"), ("specimen_b", "d_b_true_mm")):
+        d_rep = data["microstructure"][sp]["d_mm"]
+        assert math.isfinite(d_rep) and d_rep > 0
+        d_true = g[key_d]
+        assert abs(d_rep - d_true) / d_true <= TOL_D_REL, (
+            f"{sp}: d={d_rep*1e3:.2f} um deviates from true {d_true*1e3:.2f} um "
+            f"by {abs(d_rep-d_true)/d_true*100:.1f}% (> {TOL_D_REL*100:.0f}%)"
+        )
+        L_um = data["microstructure"][sp]["mean_intercept_um"]
+        d_from_intercept = 1.128 * L_um * 1e-3
+        assert abs(d_rep - d_from_intercept) / d_from_intercept <= 0.02, (
+            f"{sp}: reported d not consistent with reported mean intercept "
+            f"(d=1.128*L not respected)"
+        )
+
+
+def test_hardness_hall_petch():
+    data = load_report()
+    truth = load_truth()
+    hp = truth["hall_petch"]
+    for sp, rep_key in (("specimen_a", "specimen_a_HV"), ("specimen_b", "specimen_b_HV")):
+        d = data["microstructure"][sp]["d_mm"]
+        h_expect = hp["H0_HV"] + hp["k_HV_mm_half"] / math.sqrt(d)
+        h_rep = data["hardness"][rep_key]
+        assert abs(h_rep - h_expect) / h_expect <= TOL_H_REL, (
+            f"{sp}: H={h_rep:.1f} HV inconsistent with Hall-Petch from reported d "
+            f"(expected {h_expect:.1f} HV, > {TOL_H_REL*100:.0f}%)"
+        )
+
+
+def test_hardness_vs_ground_truth():
+    data = load_report()
+    truth = load_truth()
+    for sp, rep_key in (("specimen_a", "specimen_a_HV"), ("specimen_b", "specimen_b_HV")):
+        h_rep = data["hardness"][rep_key]
+        h_true = truth["hardness"][f"H_{sp[-1]}_true_HV"]
+        assert abs(h_rep - h_true) / h_true <= TOL_H_TRUE_REL, (
+            f"{sp}: H={h_rep:.1f} HV deviates from true {h_true:.1f} HV "
+            f"by {abs(h_rep-h_true)/h_true*100:.1f}% (> {TOL_H_TRUE_REL*100:.0f}%)"
+        )
+
+
+def test_wear_coefficients():
+    data = load_report()
+    truth = load_truth()
+    fn = data["wear"]["test_conditions"]["normal_force_n"]
+    s = data["wear"]["test_conditions"]["sliding_distance_m"]
+    for sp, k_true in (("specimen_a", truth["wear"]["specimen_a"]["k_true_mm3_Nm"]),
+                       ("specimen_b", truth["wear"]["specimen_b"]["k_true_mm3_Nm"])):
+        k_rep = data["wear"][sp]["wear_coefficient_mm3_Nm"]
+        v_rep = data["wear"][sp]["volume_loss_mm3"]
+        assert math.isfinite(k_rep) and k_rep > 0
+        assert abs(k_rep - v_rep / (fn * s)) / (v_rep / (fn * s)) <= 1e-3, (
+            f"{sp}: k not equal to V/(Fn*s)"
+        )
+        assert abs(k_rep - k_true) / k_true <= TOL_K_REL, (
+            f"{sp}: k={k_rep:.3e} deviates from true {k_true:.3e} by "
+            f"{abs(k_rep-k_true)/k_true*100:.1f}% (> {TOL_K_REL*100:.0f}%)"
+        )
+
+
+def test_archard_closure():
+    data = load_report()
+    truth = load_truth()
+    mismatch, cl_a, cl_b = _recomputed_mismatch(data)
+    k_a_true = truth["wear"]["specimen_a"]["k_true_mm3_Nm"]
+    k_b_true = truth["wear"]["specimen_b"]["k_true_mm3_Nm"]
+    h_a_true = truth["hardness"]["H_a_true_HV"]
+    h_b_true = truth["hardness"]["H_b_true_HV"]
+    cl_a_true = k_a_true * h_a_true
+    cl_b_true = k_b_true * h_b_true
+    mismatch_true = abs(cl_a_true - cl_b_true) / (0.5 * (cl_a_true + cl_b_true))
+    # The true mismatch is NOT small: specimen A's measured wear genuinely
+    # exceeds what clean Hall-Petch/Archard alone predicts. The gate checks
+    # that the reported mismatch reflects reality, not that it is near zero.
+    assert abs(mismatch - mismatch_true) <= TOL_CLOSURE_ABS, (
+        f"Archard closure mismatch not consistent with measured data: reported "
+        f"{mismatch*100:.1f}% vs true {mismatch_true*100:.1f}% "
+        f"(k_A*H_A={cl_a:.4e} vs k_B*H_B={cl_b:.4e})"
+    )
+    hd = data["hardness"]
+    w = data["wear"]
+    assert hd["specimen_b_HV"] > hd["specimen_a_HV"], "fine-grained specimen must be harder"
+    assert w["specimen_b"]["wear_coefficient_mm3_Nm"] < w["specimen_a"]["wear_coefficient_mm3_Nm"], (
+        "fine-grained (harder) specimen must wear less than the coarse one"
+    )
+
+
+def test_archard_explanation_content():
+    data = load_report()
+    ex = data["archard"]["explanation"]
+    assert isinstance(ex, str)
+    assert len(ex) > 180
+    for token in ("Hall-Petch", "grain", "harder", "wears less"):
+        assert token in ex, f"explanation must mention {token!r}"
+    assert "grain refinement" in ex or "Grain refinement" in ex, (
+        "explanation must invoke grain refinement as the cause"
+    )
+    assert "k*H" in ex, "explanation must state the k*H closure products"
+    # The two numeric k-H products must be cited (in any decimal/engineering
+    # notation); format-agnostic so "0.001365 and 0.001357" or "1.365e-03"
+    # both pass, but at least two numbers must be present.
+    nums = [float(t) for t in re.findall(r"[0-9]+(?:\.[0-9]*)?(?:[eE][+-]?[0-9]+)?", ex)]
+    assert len(nums) >= 2, "explanation must cite at least two numeric k-H products"
+
+
+def test_archard_mechanism_ratios():
+    data = load_report()
+    w = data["wear"]
+    hd = data["hardness"]
+    a = data["archard"]
+    k_a = w["specimen_a"]["wear_coefficient_mm3_Nm"]
+    k_b = w["specimen_b"]["wear_coefficient_mm3_Nm"]
+    h_a = hd["specimen_a_HV"]
+    h_b = hd["specimen_b_HV"]
+
+    k_ratio = a["k_ratio_coarse_over_fine"]
+    h_ratio = a["hardness_ratio_fine_over_coarse"]
+    assert math.isfinite(k_ratio) and k_ratio > 1, "k ratio must be finite and > 1 (coarse wears more)"
+    assert math.isfinite(h_ratio) and h_ratio > 1, "hardness ratio must be finite and > 1 (fine is harder)"
+    assert abs(k_ratio - k_a / k_b) / (k_a / k_b) <= 0.01, (
+        f"k_ratio_coarse_over_fine ({k_ratio:.4f}) inconsistent with reported k values "
+        f"(k_a/k_b = {k_a/k_b:.4f})"
+    )
+    assert abs(h_ratio - h_b / h_a) / (h_b / h_a) <= 0.01, (
+        f"hardness_ratio_fine_over_coarse ({h_ratio:.4f}) inconsistent with reported hardness "
+        f"(h_b/h_a = {h_b/h_a:.4f})"
+    )
+    # NOTE: k_coarse/k_fine is NOT required to equal H_fine/H_coarse here.
+    # That equality only holds under a single, clean Archard mechanism; specimen
+    # A's true wear includes a genuine excess beyond that (see test_archard_closure
+    # and authoring/provenance/dataset/generate_oxidation.py), so the two ratios
+    # are expected to differ. Only internal consistency (checked above) is graded.
+
+
+def test_residual_accounting():
+    """Required only when the report's OWN wear/hardness values (already
+    independently tolerance-gated elsewhere) produce a closure mismatch big
+    enough that it cannot be explained by measurement noise. The trigger is
+    computed from those already-graded fields, not from a self-reported
+    mismatch value, so it cannot be gamed."""
+    data = load_report()
+    truth = load_truth()
+    mismatch, _, _ = _recomputed_mismatch(data)
+    if mismatch <= RESIDUAL_TRIGGER_ABS:
+        pytest.skip("closure products agree closely enough that no accounting is required")
+
+    a = data["archard"]
+    assert "residual_accounting" in a, (
+        f"closure products disagree by {mismatch*100:.1f}% (not attributable to "
+        "measurement noise); archard.residual_accounting is required"
+    )
+    ra = a["residual_accounting"]
+    ox_true = truth["oxidation"]
+    for sp in ("specimen_a", "specimen_b"):
+        assert sp in ra, f"residual_accounting missing {sp}"
+        entry = ra[sp]
+        for key in ("mechanism", "magnitude", "unit"):
+            assert key in entry, f"residual_accounting.{sp} missing {key}"
+        assert isinstance(entry["mechanism"], str) and len(entry["mechanism"]) > 0
+        unit = str(entry["unit"]).strip()
+        assert unit in UNIT_TO_NM, f"residual_accounting.{sp}.unit {unit!r} not a recognized length unit"
+        mag_nm = float(entry["magnitude"]) * UNIT_TO_NM[unit]
+        true_nm = ox_true[sp]["oxide_regrowth_per_revolution_nm_true"]
+        assert math.isfinite(mag_nm) and mag_nm > 0
+        assert abs(mag_nm - true_nm) / true_nm <= TOL_RESIDUAL_REL, (
+            f"{sp}: residual_accounting magnitude ({entry['magnitude']} {unit} = "
+            f"{mag_nm:.1f} nm) deviates from true {true_nm:.1f} nm by "
+            f"{abs(mag_nm-true_nm)/true_nm*100:.1f}% (> {TOL_RESIDUAL_REL*100:.0f}%)"
+        )
+
+
+def test_test_conditions_and_methods():
+    data = load_report()
+    assert data["methods"]["wear_coefficient"] == "k = V / (Fn * s)"
+    assert "Hall-Petch" in data["hardness"]["relation"]
+    assert data["archard"]["closure_product_kA_HA"] == pytest.approx(
+        data["wear"]["specimen_a"]["wear_coefficient_mm3_Nm"]
+        * data["hardness"]["specimen_a_HV"],
+        rel=1e-3,
+    )
+
+
+def test_findings_markdown_structure():
+    with open(MD_FILE) as f:
+        md = f.read()
+    for hdr in (
+        "## Composition/grade",
+        "## Grain size & hardness",
+        "## Wear",
+        "## Archard closure & mechanism",
+    ):
+        assert hdr in md, f"findings.md must contain section {hdr!r}"
+    # Causal direction + mechanism (no method-name vocabulary is required).
+    low = md.lower()
+    assert "harder" in md and "wears less" in md, (
+        "findings.md must state the causal direction (harder -> less wear)"
+    )
+    assert "grain refinement" in low, (
+        "findings.md must invoke grain refinement as the causal mechanism"
+    )
+
+
+def test_findings_numbers_consistent():
+    with open(MD_FILE) as f:
+        md = f.read()
+    data = load_report()
+    h = data["hardness"]
+    w = data["wear"]
+    ms = data["microstructure"]
+    a = data["archard"]
+    # The markdown must reproduce every graded quantity to a reasonable
+    # precision for how each quantity is naturally written, so any faithful
+    # formatting passes while a value that does not match the report is
+    # rejected. Each expected quantity carries (scale, tolerance) alternatives:
+    # the closure mismatch may be a fraction or a percentage; the grain size d
+    # may be written in mm (the report's unit) or um.
+    expected = [
+        ("HV a", h["specimen_a_HV"], [(1.0, 5e-3)]),
+        ("HV b", h["specimen_b_HV"], [(1.0, 5e-3)]),
+        ("V a", w["specimen_a"]["volume_loss_mm3"], [(1.0, 1e-3)]),
+        ("V b", w["specimen_b"]["volume_loss_mm3"], [(1.0, 1e-3)]),
+        ("k a", w["specimen_a"]["wear_coefficient_mm3_Nm"], [(1.0, 1e-3)]),
+        ("k b", w["specimen_b"]["wear_coefficient_mm3_Nm"], [(1.0, 1e-3)]),
+        ("d a", ms["specimen_a"]["d_mm"], [(1.0, 5e-3), (1e3, 5e-3)]),
+        ("d b", ms["specimen_b"]["d_mm"], [(1.0, 5e-3), (1e3, 5e-3)]),
+        ("kA*HA", a["closure_product_kA_HA"], [(1.0, 1e-3)]),
+        ("kB*HB", a["closure_product_kB_HB"], [(1.0, 1e-3)]),
+        ("mismatch", a["closure_relative_mismatch"], [(1.0, 5e-2), (100.0, 5e-2)]),
+    ]
+    if "residual_accounting" in a:
+        ra = a["residual_accounting"]
+        for sp in ("specimen_a", "specimen_b"):
+            if sp in ra and "magnitude" in ra[sp]:
+                expected.append((f"residual magnitude {sp}", float(ra[sp]["magnitude"]), [(1.0, 1e-2)]))
+    toks = _numeric_tokens(md)
+    for name, val, checks in expected:
+        assert val != 0 and math.isfinite(val), f"report value {name} is degenerate"
+        matched = False
+        for scale, tol in checks:
+            if any(abs(val * scale - t) / abs(val * scale) < tol for t in toks):
+                matched = True
+                break
+        assert matched, (
+            f"findings.md must reproduce {name} = {val} "
+            f"(no numeric token in the markdown matches)"
+        )
+
+
+def _numeric_tokens(text):
+    return [float(t) for t in re.findall(r"[0-9]+(?:\.[0-9]*)?(?:[eE][+-]?[0-9]+)?", text)]
+</file>
+
+<file path="tests/test.sh">
+#!/bin/bash
+set -uo pipefail
+
+mkdir -p /logs/verifier
+cd /logs/verifier
+
+pytest /tests/test_outputs.py --no-header -q \
+  --ctrf /logs/verifier/ctrf.json \
+  > /logs/verifier/test-console-output.txt 2>&1
+rc=$?
+
+if [ "$rc" -eq 0 ]; then
+  printf '1\n' > /logs/verifier/reward.txt
+else
+  printf '0\n' > /logs/verifier/reward.txt
+fi
+
+exit 0
+</file>
+
+<file path="tests/ground_truth.json">
+{
+  "grade": "AISI 4140",
+  "composition_wt_pct": {
+    "Fe": 98.21,
+    "Mn": 0.6,
+    "Si": 0.15,
+    "Cr": 0.7,
+    "Mo": 0.34
+  },
+  "resolved_elements": [
+    "Cr",
+    "Fe",
+    "Mn",
+    "Mo",
+    "Si"
+  ],
+  "hall_petch": {
+    "H0_HV": 130.0,
+    "k_HV_mm_half": 22.0
+  },
+  "test_conditions": {
+    "Fn_N": 40.0,
+    "s_m": 6000.0
+  },
+  "pixel_size_mm": 0.0005,
+  "edx_sensitivity": {
+    "Fe": 1.0,
+    "Cr": 1.1,
+    "Mn": 1.2,
+    "Si": 2.0,
+    "Mo": 0.6,
+    "Ni": 1.1
+  },
+  "grain_size": {
+    "d_a_true_mm": 0.0432385,
+    "d_b_true_mm": 0.0111322,
+    "mean_intercept_a_um": 38.332,
+    "mean_intercept_b_um": 9.869,
+    "d_to_intercept_factor": 1.128,
+    "pixel_size_mm": 0.0005
+  },
+  "hardness": {
+    "H_a_true_HV": 235.8,
+    "H_b_true_HV": 338.51
+  },
+  "oxidation": {
+    "rig_geometry": {
+      "cylinder_diameter_mm": 34.99,
+      "counterface_block_contact_length_mm": 6.35,
+      "rotational_speed_rpm": 72.0,
+      "revolution_period_s": 0.833333,
+      "contact_time_s": 0.048139,
+      "regrowth_time_s": 0.785194
+    },
+    "contact_temperature_C_true": 350.0,
+    "specimen_a": {
+      "oxide_regrowth_per_revolution_nm_true": 645.03
+    },
+    "specimen_b": {
+      "oxide_regrowth_per_revolution_nm_true": 1271.24
+    },
+    "reference_grain_size_um": 40.0,
+    "critical_oxide_thickness_um": 1.0
+  },
+  "wear": {
+    "specimen_a": {
+      "volume_true_mm3": 1.87398,
+      "chord_true_mm": 2.01164,
+      "h_true_mm": 0.173638,
+      "k_true_mm3_Nm": 7.8082448677865e-06
+    },
+    "specimen_b": {
+      "volume_true_mm3": 0.98685,
+      "chord_true_mm": 1.63123,
+      "h_true_mm": 0.113,
+      "k_true_mm3_Nm": 4.111891910253555e-06
+    }
+  }
+}
+</file>
+
+<file path="solution/solve.sh">
+#!/bin/bash
+set -euo pipefail
+
+SCRIPT=""
+for p in "/app/solution/solve.py" "/solution/solve.py" "solution/solve.py" "solve.py"; do
+  if [ -f "$p" ]; then
+    SCRIPT="$p"
+    break
+  fi
+done
+
+if [ -z "$SCRIPT" ]; then
+  echo "Error: solve.py not found" >&2
+  exit 1
+fi
+
+python3 "$SCRIPT"
+</file>
+
+<file path="solution/solve.py">
+#!/usr/bin/env python3
+import json
+import math
+import os
+from pathlib import Path
+
+import numpy as np
+import pandas as pd
+from PIL import Image
+from scipy import ndimage
+from scipy.optimize import curve_fit
+
+DATA_DIR = Path(os.environ.get("HARBOR_DATA_DIR", "/app/data"))
+OUT_DIR = Path(os.environ.get("HARBOR_OUT_DIR", "/app/output"))
+
+FN = 40.0   # N
+S = 6000.0  # m
+PX_UM = 0.5
+D_CONV = 1.128
+DETECT_MIN_WT = 0.1
+
+SNIP_M = int(os.environ.get("SNIP_M", "16"))
+SIGMA_P = float(os.environ.get("SIGMA_P", "0.6"))     # detector width energy exponent
+FWHM_SCALE = float(os.environ.get("FWHM_SCALE", "1.0"))
+WEAR_SHOULDER_BAND = float(os.environ.get("WEAR_SHOULDER_BAND", "0.60"))  # mm around scar
+
+ELEM_KA = {"Fe": 6.398, "Cr": 5.411, "Mn": 5.895, "Si": 1.740, "Mo": 17.479, "Ni": 7.471}
+ELEM_KB = {"Fe": 7.057, "Cr": 5.947, "Mn": 6.490, "Si": None, "Mo": 19.608, "Ni": 8.263}
+
+_REF_FWHM = 0.1775
+_REF_KEV = 5.895
+
+R_GAS = 8.314  # J/mol/K
+
+
+def sigma_e(e):
+    sig_ref = FWHM_SCALE * _REF_FWHM / 2.354820045
+    return sig_ref * (e / _REF_KEV) ** SIGMA_P
+
+
+# --------------------------------------------------------------------------- EDX
+def load_calibration():
+    global _REF_FWHM, _REF_KEV
+    df = pd.read_csv(DATA_DIR / "edx_calibration.csv")
+    rows = df.to_dict("records")
+    r = {}
+    for row in rows:
+        el = str(row["element"]).strip()
+        if el == "REF":
+            line = str(row["line"]).strip()
+            if line.startswith("MnKa_FWHM"):
+                _REF_FWHM = float(row["energy_keV"])
+            elif line.startswith("MnKa_reference"):
+                _REF_KEV = float(row["energy_keV"])
+            continue
+        line = str(row["line"]).strip()
+        r.setdefault(el, {"ka": None, "kb": None, "r_kb": 0.0, "f": float(row["sensitivity_factor"])})
+        r[el]["r_kb"] = float(row["kbeta_over_kalpha"])
+        if line == "Kα":
+            r[el]["ka"] = float(row["energy_keV"])
+        elif line == "Kβ":
+            r[el]["kb"] = float(row["energy_keV"])
+    return r
+
+
+def snip_bg(counts, m=None):
+    if m is None:
+        m = SNIP_M
+    y = np.log(np.log(counts + 1.0) + 1.0)
+    for k in range(m, 0, -1):
+        y = np.minimum(y, 0.5 * (np.roll(y, k) + np.roll(y, -k)))
+    bg = np.exp(np.exp(y) - 1.0) - 1.0
+    return np.maximum(bg, 0.0)
+
+
+def gauss(x, amp, mu, sig):
+    return amp * np.exp(-0.5 * ((x - mu) / sig) ** 2)
+
+
+def fit_single(x, y, mu):
+    sig = sigma_e(mu)
+    win = (x > mu - 2.5 * sig) & (x < mu + 2.5 * sig)
+    if win.sum() < 5:
+        return None
+    p0 = [y[win].max()]
+    try:
+        popt, _ = curve_fit(lambda t, a: gauss(t, a, mu, sig), x[win], y[win], p0=p0, maxfev=20000)
+        return (float(popt[0]), mu, sig)
+    except Exception:
+        return None
+
+
+def integrate_area(x, y, mu, sig):
+    win = (x > mu - 2.5 * sig) & (x < mu + 2.5 * sig)
+    return float(np.trapezoid(y[win], x[win]))
+
+
+def quantize(path):
+    e, c = np.loadtxt(path, delimiter=",", skiprows=1, unpack=True)
+    net = c - snip_bg(c)
+    cal = load_calibration()
+
+    params = {}
+    for el in ("Fe", "Si", "Cr", "Mo", "Ni"):
+        if cal[el]["ka"] is None:
+            continue
+        p = fit_single(e, net, cal[el]["ka"])
+        if p is not None:
+            params[el] = {"ka_amp": p[0], "ka_mu": p[1], "ka_sig": p[2],
+                          "ka_area": integrate_area(e, net, p[1], p[2])}
+
+    resid = net.copy()
+    for el in ("Fe", "Cr", "Si"):
+        if el not in params:
+            continue
+        p = params[el]
+        resid -= p["ka_amp"] * np.exp(-0.5 * ((e - p["ka_mu"]) / p["ka_sig"]) ** 2)
+        if cal[el]["kb"] is not None and cal[el]["r_kb"] > 0:
+            resid -= (p["ka_amp"] * cal[el]["r_kb"]
+                      * np.exp(-0.5 * ((e - cal[el]["kb"]) / sigma_e(cal[el]["kb"])) ** 2))
+
+    m_win = (e > 5.4) & (e < 7.2)
+    xe, ye = e[m_win], resid[m_win]
+
+    def two_g(x, amp_mn, mu_mn):
+        sig_mn = sigma_e(mu_mn)
+        return (amp_mn * np.exp(-0.5 * ((x - mu_mn) / sig_mn) ** 2)
+                + amp_mn * cal["Mn"]["r_kb"]
+                * np.exp(-0.5 * ((x - cal["Mn"]["kb"]) / sigma_e(cal["Mn"]["kb"])) ** 2))
+
+    try:
+        pm, _ = curve_fit(two_g, xe, ye, p0=[ye.max(), 5.895], maxfev=50000)
+        params["Mn"] = {"ka_amp": float(pm[0]), "ka_mu": float(pm[1]),
+                        "ka_sig": sigma_e(pm[1]),
+                        "ka_area": integrate_area(e, resid, pm[1], sigma_e(pm[1]))}
+    except Exception:
+        pass
+
+    area = {}
+    for el in ("Fe", "Mn", "Cr", "Si", "Mo"):
+        if el not in params:
+            area[el] = 0.0
+        else:
+            area[el] = max(params[el]["ka_area"], 0.0) * (1.0 + cal[el]["r_kb"])
+
+    af = area.get("Fe", 0.0)
+    rel = {}
+    for el in area:
+        if el == "Fe":
+            continue
+        rel[el] = (area[el] / af) / cal[el]["f"] if af > 0 else 0.0
+    fe = 100.0 / (1.0 + sum(rel.values()))
+    comp = {el: fe * r for el, r in rel.items()}
+    comp["Fe"] = fe
+    detected = sorted(el for el, v in comp.items() if v >= DETECT_MIN_WT)
+    return comp, detected
+
+
+# ------------------------------------------------------------------------ grade
+def identify_grade(comp):
+    db = pd.read_csv(DATA_DIR / "material_database.csv")
+    best = None
+    best_score = None
+    for _, row in db.iterrows():
+        elmap = {"Mn": ("Mn_lo", "Mn_hi"), "Si": ("Si_lo", "Si_hi"),
+                 "Cr": ("Cr_lo", "Cr_hi"), "Mo": ("Mo_lo", "Mo_hi"),
+                 "Ni": ("Ni_lo", "Ni_hi")}
+        ok = True
+        score = 0.0
+        for el, (lo, hi) in elmap.items():
+            v = comp.get(el, 0.0)
+            inwin = row[lo] - 0.02 <= v <= row[hi] + 0.02
+            ok = ok and inwin
+            score += abs(v - 0.5 * (row[lo] + row[hi]))
+        if ok and (best_score is None or score < best_score):
+            best = (str(row["grade"]).strip(), float(row["H0_HV"]), float(row["k_HV_mm05"]),
+                    float(row["critical_layer_thickness_um"]))
+            best_score = score
+    if best is None and best_score is None:
+        # closest match fallback
+        dbest = None
+        dmin = float("inf")
+        for _, row in db.iterrows():
+            elmap = {"Mn": ("Mn_lo", "Mn_hi"), "Si": ("Si_lo", "Si_hi"),
+                     "Cr": ("Cr_lo", "Cr_hi"), "Mo": ("Mo_lo", "Mo_hi"),
+                     "Ni": ("Ni_lo", "Ni_hi")}
+            d = 0.0
+            for el, (lo, hi) in elmap.items():
+                v = comp.get(el, 0.0)
+                if v < row[lo]:
+                    d += (row[lo] - v) ** 2
+                elif v > row[hi]:
+                    d += (v - row[hi]) ** 2
+            if d < dmin:
+                dmin = d
+                dbest = (str(row["grade"]).strip(), float(row["H0_HV"]), float(row["k_HV_mm05"]),
+                         float(row["critical_layer_thickness_um"]))
+        best = dbest
+        best_score = dmin
+    return best
+
+
+# ------------------------------------------------------------------ grain size
+def otsu(im):
+    hist, _ = np.histogram(im, bins=256, range=(0, 256))
+    total = im.size
+    s = np.sum(np.arange(256) * hist)
+    sumB = 0.0
+    wB = 0
+    var_max = 0.0
+    thr = 127
+    for t in range(256):
+        wB += hist[t]
+        if wB == 0:
+            continue
+        wF = total - wB
+        if wF == 0:
+            break
+        sumB += t * hist[t]
+        mB = sumB / wB
+        mF = (s - sumB) / wF
+        between = wB * wF * (mB - mF) ** 2
+        if between > var_max:
+            var_max = between
+            thr = t
+    return thr
+
+
+def grain_size(path):
+    im = np.array(Image.open(path).convert("L")).astype(np.float64)
+    thr = otsu(im)
+    dark = im < thr
+    dark = ndimage.binary_closing(dark, iterations=1)
+    lab, n_lab = ndimage.label(dark)
+    counts = np.bincount(lab.ravel())
+    keep = counts > 200
+    keep[0] = False
+    mask = np.isin(lab, np.where(keep)[0])
+    b = mask[8:-8, 8:-8]
+    i8 = b.astype(np.int8)
+    crosses = int(np.sum((i8[:, 1:] == 1) & (i8[:, :-1] == 0)))
+    crosses += int(np.sum((i8[1:, :] == 1) & (i8[:-1, :] == 0)))
+    L_px = 2 * b.shape[0] * b.shape[1] / max(crosses, 1)
+    L_um = L_px * PX_UM
+    d_mm = D_CONV * L_um * 1e-3
+    return L_um, d_mm
+
+
+# --------------------------------------------------------------- residual accounting
+# Not part of the "standard" analysis chain above -- only invoked because the
+# Archard closure genuinely fails to agree (see main()). Nothing here is named
+# or hinted at in instruction.md; an agent has to notice the gap and go
+# looking through the otherwise-unused rig-geometry / temperature-log /
+# growth-reference files itself.
+def read_rig_geometry(path):
+    df = pd.read_csv(path)
+    d = dict(zip(df["parameter"], df["value"]))
+    circumference_mm = math.pi * float(d["cylinder_diameter"])
+    v_mm_s = circumference_mm * float(d["rotational_speed"]) / 60.0
+    revolution_period_s = 60.0 / float(d["rotational_speed"])
+    contact_time_s = float(d["counterface_block_contact_length"]) / v_mm_s
+    regrowth_time_s = revolution_period_s - contact_time_s
+    return {"v_mm_s": v_mm_s, "revolution_period_s": revolution_period_s,
+            "contact_time_s": contact_time_s, "regrowth_time_s": regrowth_time_s}
+
+
+def contact_temperature_C(path):
+    df = pd.read_csv(path)
+    steady = df[df["time_s"] > 1800.0]
+    if len(steady) == 0:
+        steady = df
+    return float(steady["contact_temperature_C"].mean())
+
+
+def fit_oxide_kinetics(path):
+    """Fit X^2 = k0 * exp(-Q/RT) * d^(-n) * t from the isothermal reference
+    growth curves, by linear regression on ln(X^2/t) vs 1/T and ln(d)."""
+    df = pd.read_csv(path)
+    y = np.log((df["layer_thickness_nm"].values ** 2) / df["time_s"].values)
+    invT = 1.0 / (df["temperature_C"].values + 273.15)
+    logd = np.log(df["reference_grain_size_um"].values)
+    A = np.column_stack([np.ones(len(df)), -invT, -logd])
+    coef, *_ = np.linalg.lstsq(A, y, rcond=None)
+    ln_k0, Q_over_R, n = coef
+    k0 = math.exp(ln_k0)
+    Q = Q_over_R * R_GAS
+    return k0, Q, n
+
+
+def oxide_regrowth_nm(k0, Q, n, T_C, d_um, t_s):
+    T_K = T_C + 273.15
+    kp = k0 * math.exp(-Q / (R_GAS * T_K)) * (d_um ** (-n))
+    return math.sqrt(max(kp, 0.0) * t_s)
+
+
+def residual_estimate_nm(d_um):
+    """The quantity that closes the Archard gap: oxide film regrown during
+    the non-contact portion of one rig revolution, at this specimen's own
+    grain size and its measured contact temperature."""
+    rig = read_rig_geometry(DATA_DIR / "test_rig_geometry.csv")
+    k0, Q, n = fit_oxide_kinetics(DATA_DIR / "surface_layer_reference.csv")
+    return k0, Q, n, rig
+
+
+# ------------------------------------------------------------------- wear scan
+def load_grid(path):
+    df = pd.read_csv(path)
+    xs = np.unique(df["x_mm"].values)
+    ys = np.unique(df["y_mm"].values)
+    z = df["z_mm"].values.astype(np.float64).reshape(len(ys), len(xs))
+    return xs, ys, z, float(np.min(np.diff(xs))), float(np.min(np.diff(ys)))
+
+
+def fill_small_gaps(z):
+    z = z.copy()
+    for iy in range(z.shape[0]):
+        row = z[iy]
+        good = ~np.isnan(row)
+        if good.sum() >= 2:
+            idx = np.arange(len(row))
+            z[iy, ~good] = np.interp(idx[~good], idx[good], row[good])
+    return z
+
+
+def wear_volume(path):
+    xs, ys, z, dx, dy = load_grid(path)
+    z = fill_small_gaps(z)
+    xs2 = np.broadcast_to(xs[None, :], z.shape).ravel()
+    ys2 = np.broadcast_to(ys[:, None], z.shape).ravel()
+    zz = z.ravel()
+    g = ~np.isnan(zz)
+    xk, yk, zk = xs2[g], ys2[g], zz[g]
+    # Rough worn-region extent from low points; exclude a transfer/affected zone
+    # around it from the reference-plane fit (displaced material sits proud of
+    # the undamaged surface next to the track and must not set the baseline).
+    lowthr = np.nanpercentile(z, 2.5)
+    wr = np.where(zz < lowthr)[0]
+    if wr.size:
+        cx0 = float(np.median(xk[wr]))
+        cx_span = np.ptp(xk[wr])
+        fit_keep = np.abs(xk - cx0) > (cx_span + WEAR_SHOULDER_BAND)
+    else:
+        fit_keep = np.ones_like(xk, dtype=bool)
+    xf, yf, zf = xk[fit_keep], yk[fit_keep], zk[fit_keep]
+    for _ in range(10):
+        A = np.column_stack([xf, yf, np.ones_like(xf)])
+        coef, *_ = np.linalg.lstsq(A, zf, rcond=None)
+        resid = zf - (xf * coef[0] + yf * coef[1] + coef[2])
+        med = np.median(resid)
+        mad = np.median(np.abs(resid - med))
+        thr = max(6e-3, 3.0 * mad)
+        keep = np.abs(resid - med) < thr
+        if keep.mean() < 0.35:
+            break
+        xf, yf, zf = xf[keep], yf[keep], zf[keep]
+    tilt = np.broadcast_to(xs[None, :], z.shape) * coef[0] + np.broadcast_to(
+        ys[:, None], z.shape
+    ) * coef[1] + coef[2]
+    zd = z - tilt
+    ref = float(np.nanmedian(zd[zd > np.nanmedian(zd) - 1e-3]))
+    depth_field = ref - zd
+    mask = depth_field > 6e-3
+    lab, n_lab = ndimage.label(mask)
+    min_blob = 0.05 / (dx * dy)
+    keep_lab = [i for i in range(1, n_lab + 1) if (lab == i).sum() >= min_blob]
+    mask = np.isin(lab, keep_lab)
+    vol = float(np.sum(np.where(mask, depth_field, 0.0)) * dx * dy)
+    return vol, ref, coef
+
+
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+
+    comp_a, det_a = quantize(DATA_DIR / "edx_spectrum_a.csv")
+    comp_b, det_b = quantize(DATA_DIR / "edx_spectrum_b.csv")
+    comp = {el: (comp_a[el] + comp_b[el]) / 2.0 for el in comp_a}
+    consistent = sorted(det_a) == sorted(det_b) and all(
+        abs(comp_a[el] - comp_b[el]) <= 0.15 for el in comp_a
+    )
+
+    grade, h0, k_hp, xc_um = identify_grade(comp)
+
+    L_a, d_a = grain_size(DATA_DIR / "microstructure_a.png")
+    L_b, d_b = grain_size(DATA_DIR / "microstructure_b.png")
+    H_a = h0 + k_hp / math.sqrt(d_a)
+    H_b = h0 + k_hp / math.sqrt(d_b)
+
+    V_a, ref_a, plane_a = wear_volume(DATA_DIR / "wear_surface_a.csv")
+    V_b, ref_b, plane_b = wear_volume(DATA_DIR / "wear_surface_b.csv")
+    k_a = V_a / (FN * S)
+    k_b = V_b / (FN * S)
+
+    cl_a = k_a * H_a
+    cl_b = k_b * H_b
+    mismatch = abs(cl_a - cl_b) / (0.5 * (cl_a + cl_b))
+
+    archard_obj = {
+        "closure_product_kA_HA": cl_a,
+        "closure_product_kB_HB": cl_b,
+        "closure_relative_mismatch": mismatch,
+        "k_ratio_coarse_over_fine": k_a / k_b,
+        "hardness_ratio_fine_over_coarse": H_b / H_a,
+        "explanation": (
+            f"Both specimens share the chemistry of {grade} (EDX-verified), so "
+            f"the same Hall-Petch constants apply; only the ferrite grain size "
+            f"differs (coarse {d_a*1e3:.1f} um vs fine {d_b*1e3:.1f} um), giving "
+            f"H = {H_a:.0f} vs {H_b:.0f} HV. Grain refinement raises hardness "
+            f"through the Hall-Petch relation H = H0 + k*d^(-1/2). Under "
+            f"identical block-on-cylinder conditions the fine-grained specimen "
+            f"is harder and wears less (k = {k_b:.3e} vs {k_a:.3e} mm3/Nm); "
+            f"reported k*H products ({cl_a:.3e} vs {cl_b:.3e}, {mismatch*100:.1f}% "
+            f"mismatch) and their agreement or disagreement follow from the "
+            f"measured wear and hardness of each specimen."
+        ),
+    }
+
+    # The closure products do not closely agree (see explanation above), so
+    # quantify what accounts for the gap. This uses data not touched by any
+    # other stage: rig geometry, per-specimen contact-temperature logs, and
+    # an isothermal oxide-growth reference table.
+    if mismatch > 0.10:
+        k0_ox, Q_ox, n_ox, rig = residual_estimate_nm(0)
+        T_a = contact_temperature_C(DATA_DIR / "contact_temperature_log_a.csv")
+        T_b = contact_temperature_C(DATA_DIR / "contact_temperature_log_b.csv")
+        d_a_um = d_a * 1000.0
+        d_b_um = d_b * 1000.0
+        X_a_nm = oxide_regrowth_nm(k0_ox, Q_ox, n_ox, T_a, d_a_um, rig["regrowth_time_s"])
+        X_b_nm = oxide_regrowth_nm(k0_ox, Q_ox, n_ox, T_b, d_b_um, rig["regrowth_time_s"])
+        mech = (
+            "Grain-boundary-diffusion-accelerated oxide film growth: fit against "
+            "the isothermal reference growth curves and evaluated at each "
+            "specimen's own contact temperature and grain size over the "
+            "non-contact portion of one rig revolution, the finer-grained "
+            "specimen regrows a near-critical oxide film within that interval "
+            "while the coarser-grained specimen does not, leaving it exposed "
+            "to additional metal-metal contact beyond the classical "
+            "Hall-Petch/Archard prediction."
+        )
+        archard_obj["residual_accounting"] = {
+            "specimen_a": {"mechanism": mech, "magnitude": round(X_a_nm, 1), "unit": "nm"},
+            "specimen_b": {"mechanism": mech, "magnitude": round(X_b_nm, 1), "unit": "nm"},
+        }
+
+    report = {
+        "material_identification": {
+            "grade": grade,
+            "composition_wt_pct": {k: round(v, 3) for k, v in comp.items()},
+            "detected_elements": sorted(det_a),
+            "compositions_consistent_between_specimens": bool(consistent),
+            "edx_method": "SNIP continuum removal, Gaussian line fitting, "
+                          "K-beta overlap handled via tabulated ratios, "
+                          "Cliff-Lorimer relative quantification",
+            "hall_petch": {"H0_HV": round(h0, 2), "k_HV_mm_half": round(k_hp, 2)},
+        },
+        "microstructure": {
+            "specimen_a": {"mean_intercept_um": round(L_a, 3), "d_mm": round(d_a, 7)},
+            "specimen_b": {"mean_intercept_um": round(L_b, 3), "d_mm": round(d_b, 7)},
+            "method": "ASTM mean linear intercept, Otsu thresholding, small-blob "
+                      "rejection, d = 1.128 * L, scale 0.5 um/px",
+        },
+        "hardness": {
+            "specimen_a_HV": round(H_a, 2),
+            "specimen_b_HV": round(H_b, 2),
+            "relation": "Hall-Petch H = H0 + k * d^(-1/2), d in mm, constants of the identified grade",
+        },
+        "wear": {
+            "test_conditions": {"normal_force_n": FN, "sliding_distance_m": S},
+            "specimen_a": {"volume_loss_mm3": round(V_a, 4),
+                           "wear_coefficient_mm3_Nm": k_a},
+            "specimen_b": {"volume_loss_mm3": round(V_b, 4),
+                           "wear_coefficient_mm3_Nm": k_b},
+        },
+        "archard": archard_obj,
+        "methods": {
+            "composition": "EDX net peak areas, relative sensitivities, Fe by balance",
+            "grade": "composition windows matched against material_database.csv",
+            "grain_size": "intercept method on etched micrographs",
+            "hardness": "Hall-Petch with identified-grade constants",
+            "wear_volume": "robust plateau leveling + void integration of profilometry",
+            "wear_coefficient": "k = V / (Fn * s)",
+            "archard": "k * H consistency check across specimens",
+        },
+    }
+
+    with open(OUT_DIR / "material_report.json", "w") as f:
+        json.dump(report, f, indent=2)
+    with open(OUT_DIR / "findings.md", "w") as f:
+        f.write(build_markdown(report))
+
+
+def build_markdown(r):
+    mi = r["material_identification"]
+    ms = r["microstructure"]
+    h = r["hardness"]
+    w = r["wear"]
+    a = r["archard"]
+    lines = [
+        "# Microstructure-Wear Analysis: Low-Alloy Steel",
+        "",
+        "## Composition/grade",
+        f"- Identified grade: **{mi['grade']}** (EDX composition: "
+        + ", ".join(f"{k} {v:.2f} wt%" for k, v in mi["composition_wt_pct"].items() if k != "Fe")
+        + f", Fe {mi['composition_wt_pct']['Fe']:.2f} wt%; elements detected: {', '.join(mi['detected_elements'])})",
+        f"- Hall-Petch constants of the identified grade: H0 = {mi['hall_petch']['H0_HV']:.0f} HV, "
+        f"k = {mi['hall_petch']['k_HV_mm_half']:.0f} HV.mm^(1/2)",
+        "- Quantification: SNIP continuum (baseline) removal; net peak areas "
+        "integrated over +-2.5-sigma windows at Mn K-alpha (5.895 keV), Cr "
+        "K-alpha (5.411 keV), Fe K-alpha (6.398 keV), Mo K-alpha (17.479 keV); "
+        "Cliff-Lorimer relative sensitivities; Fe by balance.",
+        "",
+        "## Grain size & hardness",
+        f"- Coarse: L = {ms['specimen_a']['mean_intercept_um']:.1f} um, "
+        f"d = {ms['specimen_a']['d_mm']*1e3:.1f} um; H = {h['specimen_a_HV']:.0f} HV "
+        f"(ASTM mean linear intercept, d = 1.128*L)",
+        f"- Fine:   L = {ms['specimen_b']['mean_intercept_um']:.1f} um, "
+        f"d = {ms['specimen_b']['d_mm']*1e3:.1f} um; H = {h['specimen_b_HV']:.0f} HV",
+        "- Grain refinement (d_fine < d_coarse) raises hardness via Hall-Petch.",
+        "",
+        "## Wear",
+        f"- Conditions: Fn = {w['test_conditions']['normal_force_n']:.0f} N, "
+        f"s = {w['test_conditions']['sliding_distance_m']:.0f} m, identical for both specimens",
+        f"- Coarse: V = {w['specimen_a']['volume_loss_mm3']:.4f} mm^3, "
+        f"k = {w['specimen_a']['wear_coefficient_mm3_Nm']:.3e} mm^3/(N.m)",
+        f"- Fine:   V = {w['specimen_b']['volume_loss_mm3']:.4f} mm^3, "
+        f"k = {w['specimen_b']['wear_coefficient_mm3_Nm']:.3e} mm^3/(N.m)",
+        "- Reference datum: robust plane (iterative MAD-trimmed, 3*MAD threshold) "
+        "fitted to the undamaged surface outside the scar and its transfer "
+        "shoulder, so displaced material does not lift the baseline; the scar is "
+        "isolated by a 6 um depth threshold plus a minimum-blob filter.",
+        "",
+        "## Archard closure & mechanism",
+        f"- k_A*H_A = {a['closure_product_kA_HA']:.3e}, "
+        f"k_B*H_B = {a['closure_product_kB_HB']:.3e} "
+        f"({a['closure_relative_mismatch']*100:.1f}% mismatch)",
+        f"- k(coarse)/k(fine) = {a['k_ratio_coarse_over_fine']:.2f}, "
+        f"H(fine)/H(coarse) = {a['hardness_ratio_fine_over_coarse']:.2f}",
+        "- Mechanism: " + a["explanation"],
+    ]
+    if "residual_accounting" in a:
+        ra = a["residual_accounting"]
+        lines.append(
+            f"- Residual accounting: {ra['specimen_a']['mechanism']} "
+            f"Coarse: {ra['specimen_a']['magnitude']:.1f} {ra['specimen_a']['unit']}; "
+            f"fine: {ra['specimen_b']['magnitude']:.1f} {ra['specimen_b']['unit']}."
+        )
+    lines.append("")
+    return "\n".join(lines) + "\n"
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="authoring/provenance/generate_ground_truth.py">
+#!/usr/bin/env python3
+"""Provenance verifier for tests/ground_truth.json.
+
+Ground truth is NOT hand-authored: the dataset and the reference values are
+produced by the generators in authoring/provenance/dataset/, and the graded truth values
+come from the fixed reference parameters embedded in those generators.
+
+This script proves the chain end-to-end:
+
+  1. regenerates the full dataset (spectra, micrographs, wear surfaces) and
+     ground_truth.json into a scratch directory with the shipped generators;
+  2. diffs the regenerated files against the ones shipping in the task
+     (environment/data and tests/ground_truth.json) — they must be
+     byte-identical;
+  3. runs the reference solver (solution/solve.py) on the regenerated data
+     and runs the verifier suite against the regenerated ground truth,
+     reporting how many gates pass.
+
+Usage (from the task root, with numpy, pandas, pillow and scipy installed):
+
+    python3 authoring/provenance/generate_ground_truth.py
+"""
+
+import json
+import shutil
+import subprocess
+import sys
+import tempfile
+from pathlib import Path
+
+ROOT = Path(__file__).resolve().parents[2]
+DATASET_DIR = Path(__file__).resolve().parent / "dataset"
+REPO_DATA = ROOT / "environment" / "data"
+REPO_GT = ROOT / "tests" / "ground_truth.json"
+
+ORDER = ["generate_edx.py", "generate_microstructure.py", "generate_oxidation.py", "generate_wear_surfaces.py"]
+
+
+def main() -> int:
+    with tempfile.TemporaryDirectory(prefix="ahp_provenance_") as tmp:
+        chall = Path(tmp) / "challenge"
+        (chall / "environment" / "data").mkdir(parents=True)
+        (chall / "tests").mkdir(parents=True)
+
+        for script in ORDER:
+            r = subprocess.run(
+                [sys.executable, str(DATASET_DIR / script), str(chall)],
+                capture_output=True,
+                text=True,
+            )
+            if r.returncode != 0:
+                print(f"FAIL: {script} did not run cleanly\n{r.stderr}")
+                return 1
+
+        GENERATED = sorted(
+            p.name for p in (chall / "environment" / "data").iterdir()
+        )
+        bad = []
+        for name in GENERATED:
+            if not (REPO_DATA / name).read_bytes() == (chall / "environment" / "data" / name).read_bytes():
+                bad.append(f"data: {name}")
+        for provided in ("edx_calibration.csv", "material_database.csv"):
+            shutil.copy2(REPO_DATA / provided, chall / "environment" / "data" / provided)
+        gt = chall / "tests" / "ground_truth.json"
+        if not gt.read_bytes() == REPO_GT.read_bytes():
+            bad.append("tests/ground_truth.json")
+
+        print(f"data files regenerated: {len(GENERATED)}/{len(GENERATED)}"
+              if not any(b.startswith("data:") for b in bad) else "DATA MISMATCH")
+        if bad:
+            for b in bad:
+                print(f"  MISMATCH: {b}")
+            return 1
+        print("ground_truth.json regenerated: identical")
+        print("=> environment/data and tests/ground_truth.json are exactly the "
+              "generator output (reference parameters, fixed seeds)")
+
+        out = Path(tmp) / "solver_out"
+        r = subprocess.run(
+            [sys.executable, str(ROOT / "solution" / "solve.py")],
+            env={
+                **dict(env_overrides()),
+                "HARBOR_DATA_DIR": str(chall / "environment" / "data"),
+                "HARBOR_OUT_DIR": str(out),
+            },
+            capture_output=True,
+            text=True,
+        )
+        if r.returncode != 0:
+            print(f"FAIL: reference solver did not run cleanly\n{r.stderr}")
+            return 1
+
+        r = subprocess.run(
+            [sys.executable, "-m", "pytest", str(ROOT / "tests" / "test_outputs.py"), "-q"],
+            env={
+                **dict(env_overrides()),
+                "HARBOR_OUT_DIR": str(out),
+                "HARBOR_TRUTH_DIR": str(chall / "tests"),
+            },
+            capture_output=True,
+            text=True,
+        )
+        print(r.stdout.strip().splitlines()[-1] if r.stdout.strip() else r.stderr.strip())
+        oracle_ok = "passed" in r.stdout and "failed" not in r.stdout
+        if not oracle_ok:
+            return 1
+
+        # Nop check: an empty output directory (no submission at all) must
+        # fail the verifier. This is the companion compliance requirement to
+        # "Oracle scores 1.0" -- both are checked here, not just claimed.
+        nop_out = Path(tmp) / "nop_out"
+        nop_out.mkdir()
+        r_nop = subprocess.run(
+            [sys.executable, "-m", "pytest", str(ROOT / "tests" / "test_outputs.py"), "-q"],
+            env={
+                **dict(env_overrides()),
+                "HARBOR_OUT_DIR": str(nop_out),
+                "HARBOR_TRUTH_DIR": str(chall / "tests"),
+            },
+            capture_output=True,
+            text=True,
+        )
+        nop_correctly_fails = r_nop.returncode != 0
+        if not nop_correctly_fails:
+            print("FAIL: nop (empty /app/output) unexpectedly passed the verifier -- "
+                  "reward.txt would be gameable by doing nothing")
+            return 1
+        print("nop check: empty output correctly fails the verifier (reward 0.0)")
+
+        return 0
+
+
+def env_overrides():
+    return {}
+
+
+if __name__ == "__main__":
+    sys.exit(main())
+</file>
+
+<file path="authoring/provenance/dataset_manifest.md">
+# Dataset manifest — archard-hallpetch
+
+This task ships ten instrument files plus two reference tables. Everything
+the verifier grades is reproducible from this directory.
+
+## Generators (reproduce the dataset)
+
+All data under `environment/data/` is generated synthetically with fixed
+seeds by four self-contained scripts in `authoring/provenance/dataset/`, run in this order:
+
+| script | produces | key reference parameters (fixed) |
+|---|---|---|
+| `generate_edx.py` | `edx_spectrum_a.csv`, `edx_spectrum_b.csv` | true composition `C_TRUE` (Fe 98.21, Mn 0.60, Si 0.15, Cr 0.70, Mo 0.34 wt%), Be-windowed Si(Li) model: `EMIN 0.20, EMAX 20.20, ESTEP 0.02 keV`, Poisson counting noise on SNIP-shaped continuum + Gaussian K-alpha/K-beta lines (internal width model `sigma = 0.026 * E^0.6` keV), escape/pile-up artifacts; seeds 4101/4102 |
+| `generate_microstructure.py` | `microstructure_a.png`, `microstructure_b.png` | equiaxed-grain mosaics, seeds 4201/4202, lattice spacing 80 px (coarse) / 21 px (fine) at `PX_UM = 0.5` um/px; `D_CONV = 1.128` |
+| `generate_oxidation.py` | `surface_layer_reference.csv`, `contact_temperature_log_a.csv`, `contact_temperature_log_b.csv`, `test_rig_geometry.csv` | grain-size-dependent parabolic oxidation law fit from Runk & Kim (1970) low-temperature Fe-C kinetics + Raman et al. (1992) `kp ~ 1/d` grain-size dependence (reference grain size 40 um); reference calibration grid: grain sizes 10/20/40/80 um x temperatures 250/300/350/400 C x 6 time points, 4% multiplicative noise, seed 4501; contact-temperature logs ramp (tau=300s) to a shared 350 C steady state, seeds 4601/4602; rig geometry is a standard ASTM G77 block-on-ring configuration: 34.99 mm cylinder diameter, 6.35 mm counterface block contact length, 72 rpm (ASTM G77 dry interlaboratory condition). The output filename and its `layer_thickness_nm` column are deliberately mechanism-neutral (not `oxide_*`) — this is agent-visible data, and naming it "oxide" would hand over the residual-accounting mechanism; see README.md, "Why the labels are neutral". |
+| `generate_wear_surfaces.py` | `wear_surface_a.csv`, `wear_surface_b.csv` | block-on-cylinder scars: cylinder `R = 3.0` mm, scan `6.0 x 8.0` mm at `0.02` mm pitch; groove depth `h` 0.173638 mm (a) / 0.113 mm (b), tilt + containment + debris/dropout artifacts, plus transferred-material shoulders flanking each scar (band to `chord/2 + 0.55` mm, peak 0.16 mm); seeds 4301/4302. Specimen A's depth is set ~35% deeper than a clean Hall-Petch/Archard closure would imply, representing a partial transition to severe oxidative wear (see README.md, "Oxidative wear mechanism") — this is an authored design choice, not a literature-derived magnitude. |
+
+Regeneration is byte-identical: run the four scripts in the order above (each
+takes the task root as its single argument, or no argument to write directly
+into the real project) and the data files match `environment/data/` exactly.
+Full verification, including the verifier, is:
+
+```
+python3 -m pip install numpy pandas pillow scipy   # if needed
+python3 authoring/provenance/generate_ground_truth.py
+```
+
+`generate_oxidation.py` reads the grain sizes written by
+`generate_microstructure.py`, so it must run after it and before
+`generate_wear_surfaces.py` (the merge order into `tests/ground_truth.json`
+must match the shipped file for the byte-identical diff check).
+
+## Provided reference tables (not generated)
+
+- `environment/data/edx_calibration.csv` — the Si(Li) EDS calibration:
+  line energies, K-beta/K-alpha intensity ratios, relative sensitivity
+  factors, plus two `REF` rows pinning the detector resolution: a reference
+  Mn K-alpha FWHM (0.1775 keV at 5.895 keV) and its energy. Per-line widths
+  are derived from the reference, not tabulated per line.
+- `environment/data/material_database.csv` — the candidate low-alloy steel
+  grades with composition windows, Hall-Petch constants, and a per-grade
+  critical surface-layer thickness (`critical_layer_thickness_um`; 1.0 for
+  AISI 4140, set at the low end of Quinn's cited 1-3 um range for ferrous
+  oxides — the column is named mechanism-neutrally for the same reason as
+  `surface_layer_reference.csv` above). Includes a close-neighbor decoy grade
+  (AISI 4142) whose Mn/Mo windows sit just outside the true composition.
+
+## Ground truth origin
+
+`tests/ground_truth.json` is not hand-authored. It is the fixed reference
+parameter set embedded in the four generators: feed composition
+(`composition_wt_pct`, `resolved_elements`), target grain sizes
+(`d_a_true_mm = D_CONV * mean_intercept_a`, 0.0432385 / 0.0111322 mm),
+Hall-Petch hardness of those grain sizes for the matched grade
+(235.8 / 338.51 HV), oxidation truths (rig geometry, shared 350 C contact
+temperature, true oxide regrowth per revolution: 645.03 nm coarse / 1271.24 nm
+fine), and wear truths computed from the groove geometry
+(`volume_true_mm3`, `chord_true_mm`, `h_true_mm`,
+`k_true_mm3_Nm = V / (40 N * 6000 m)`; specimen A's volume includes the
+deliberate oxidative-wear excess). Running
+`authoring/provenance/generate_ground_truth.py` regenerates this file byte-for-byte from
+the generators and also confirms that the reference solver
+(`solution/solve.py`) passes all verifier gates against it.
+
+## Reference solver
+
+`solution/solve.py` is the oracle implementation of the standard analyses
+(SNIP continuum removal, Gaussian line fitting with energy-scaled widths
+from the reference FWHM and tabulated K-beta ratios, Cliff-Lorimer relative
+quantification, Fe by balance; ASTM E112 intercept grain size with
+`d = 1.128 * L`; robust-plane wear-volume integration excluding the transfer
+shoulder; a grain-size-dependent Arrhenius fit to the oxide-growth reference
+table (shipped as `surface_layer_reference.csv`), evaluated at each specimen's own contact temperature and grain size
+over one rig revolution's non-contact window; Archard closure, reported as
+measured rather than forced toward zero). It is the ground truth's
+cross-check and the reference for the tolerance calibration.
+</file>
+
+<file path="authoring/provenance/dataset/generate_edx.py">
+import json
+import math
+import sys
+from pathlib import Path
+
+import numpy as np
+
+BUNDLE = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[3]
+OUT_DIR = BUNDLE / "environment/data"
+TRUTH_FILE = BUNDLE / "tests/ground_truth.json"
+
+# True matrix composition (wt%), balance Fe. C/P/S and Ni are below detection
+# for a Be-windowed Si(Li) EDS under the stated acquisition; they are absent.
+# Mn, Cr and Mo are placed beyond the calibrated composition tolerances from
+# BOTH their grade-window midpoints and published nominal values, so window-
+# midpoint, published/textbook, or memory-sourced reporting clears no gate.
+C_TRUE = {"Fe": 98.21, "Mn": 0.60, "Si": 0.15, "Cr": 0.70, "Mo": 0.34}
+F_SEN = {"Fe": 1.00, "Cr": 1.10, "Mn": 1.20, "Si": 2.00, "Mo": 0.60, "Ni": 1.10}
+RATIO_KB_KA = {"Fe": 0.130, "Cr": 0.140, "Mn": 0.140, "Si": 0.000, "Mo": 0.190, "Ni": 0.150}
+LINES_KA = {"Fe": 6.398, "Cr": 5.411, "Mn": 5.895, "Si": 1.740, "Mo": 17.479, "Ni": 7.471}
+LINES_KB = {"Fe": 7.057, "Cr": 5.947, "Mn": 6.490, "Si": None, "Mo": 19.608, "Ni": 8.263}
+
+# acquisition / detector model
+EMIN, EMAX, ESTEP = 0.20, 20.20, 0.02
+FE_TOTAL = 2.26e6  # integrated net counts, all Fe K lines
+
+# per-element energy line peaks: (energy_keV, integrated net area)
+def build_lines():
+    lines = []
+    for el, c in C_TRUE.items():
+        if c <= 0:
+            continue
+        area_total = FE_TOTAL * F_SEN[el] * c / C_TRUE["Fe"]
+        ka = area_total / (1.0 + RATIO_KB_KA[el])
+        lines.append((LINES_KA[el], ka))
+        if RATIO_KB_KA[el] > 0:
+            lines.append((LINES_KB[el], ka * RATIO_KB_KA[el]))
+    return lines
+
+
+def gauss(x, mu, sigma, area):
+    return area / (math.sqrt(2.0 * math.pi) * sigma) * np.exp(-0.5 * ((x - mu) / sigma) ** 2)
+
+
+def sigma_e(e):
+    return 0.026 * e**0.6
+
+
+def background(e):
+    return (
+        260.0
+        + 90000.0 * np.exp(-e / 2.8)
+        + 5000.0 * np.exp(-0.5 * ((e - 1.0) / 1.2) ** 2)
+    )
+
+
+def make_spectrum(seed, artifacts=True):
+    rng = np.random.default_rng(seed)
+    e = np.arange(EMIN, EMAX + ESTEP / 2.0, ESTEP)
+    bkg = background(e)
+    spec = np.zeros_like(e)
+    spec += bkg
+
+    fe_ka_total = 2.0e6
+    for (mu, area) in build_lines():
+        sig = sigma_e(mu)
+        spec += gauss(e, mu, sig, area)
+
+    if artifacts:
+        # escape peak: Fe K-alpha minus Si K-alpha (detector escape), well above noise
+        escaped = gauss(e, 4.658, sigma_e(4.658), 5500.0)
+        spec += escaped
+        # charge pile-up (sum) peaks, small but on an otherwise quiet high-energy tail
+        spec += gauss(e, 2.0 * 6.398, sigma_e(12.796), 10000.0)  # 2 x FeKa
+        spec += gauss(e, 6.398 + 5.411, sigma_e(11.809), 180.0)  # FeKa + CrKa
+        spec += gauss(e, 6.398 + 5.895, sigma_e(12.293), 130.0)  # FeKa + MnKa
+
+    counts = rng.poisson(np.maximum(spec, 0.0)).astype(np.int64)
+    return e, counts
+
+
+def write_csv(path, e, counts):
+    with open(path, "w", newline="") as f:
+        f.write("energy_keV,counts\n")
+        for i in range(len(e)):
+            f.write(f"{e[i]:.2f},{int(counts[i])}\n")
+
+
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (BUNDLE / "tests").mkdir(parents=True, exist_ok=True)
+
+    for name, seed in [("edx_spectrum_a.csv", 4101), ("edx_spectrum_b.csv", 4102)]:
+        e, counts = make_spectrum(seed)
+        write_csv(OUT_DIR / name, e, counts)
+        print(f"wrote {OUT_DIR / name}: {len(e)} channels, total counts {counts.sum()}")
+
+    truth = {
+        "grade": "AISI 4140",
+        "composition_wt_pct": C_TRUE,
+        "resolved_elements": sorted(C_TRUE.keys()),
+        "hall_petch": {"H0_HV": 130.0, "k_HV_mm_half": 22.0},
+        "test_conditions": {"Fn_N": 40.0, "s_m": 6000.0},
+        "pixel_size_mm": 0.0005,
+        "edx_sensitivity": F_SEN,
+    }
+    with open(TRUTH_FILE, "w") as f:
+        json.dump(truth, f, indent=2)
+    print(f"wrote {TRUTH_FILE} (base truth, grain/wear filled next)")
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="authoring/provenance/dataset/generate_oxidation.py">
+import json
+import math
+import sys
+from pathlib import Path
+
+import numpy as np
+
+BUNDLE = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[3]
+OUT_DIR = BUNDLE / "environment/data"
+TRUTH_FILE = BUNDLE / "tests/ground_truth.json"
+
+# --- reference oxidation kinetics (parabolic, grain-size-dependent) ---
+# Fit basis: Runk & Kim (1970), Fe-C steel, 200-350C parabolic rate constants
+# (log kg [mg2/cm4/yr] = 9.515 - 6190/T[K]); grain-size dependence rate ~ 1/d
+# per Raman et al. (1992), Fe-2.25Cr-1Mo, oxidation rate inversely proportional
+# to substrate grain diameter, reference grain size ~40um matching that study.
+D_REF_UM = 40.0
+YEAR_S = 365.25 * 24 * 3600
+
+def kg_runkkim(T_C):
+    T_K = T_C + 273.15
+    return 10 ** (9.515 - 6190.0 / T_K)  # mg2/cm4/yr
+
+def kp_ref_cm2_per_s(T_C):
+    kg = kg_runkkim(T_C)
+    kp_cm2_yr = 4.423 * 0.1071 * kg
+    return kp_cm2_yr / YEAR_S
+
+def kp_cm2_per_s(T_C, d_um):
+    return kp_ref_cm2_per_s(T_C) * (D_REF_UM / d_um)
+
+def oxide_thickness_nm(T_C, d_um, t_s):
+    kp = kp_cm2_per_s(T_C, d_um)
+    X_cm = math.sqrt(kp * t_s)
+    return X_cm * 1e7
+
+# --- reference calibration table ---
+REF_GRAIN_SIZES_UM = [10.0, 20.0, 40.0, 80.0]
+REF_TEMPS_C = [250, 300, 350, 400]
+REF_TIMES_S = [60, 200, 500, 900, 1350, 1800]
+NOISE_FRAC = 0.04
+SEED = 4501
+
+def write_oxide_reference():
+    rng = np.random.default_rng(SEED)
+    rows = []
+    for d in REF_GRAIN_SIZES_UM:
+        for T in REF_TEMPS_C:
+            for t in REF_TIMES_S:
+                x_true = oxide_thickness_nm(T, d, t)
+                x_meas = x_true * (1.0 + rng.normal(0.0, NOISE_FRAC))
+                rows.append((d, T, t, max(x_meas, 0.1)))
+    # Filename and column header are deliberately mechanism-neutral: this is
+    # the file the agent sees (via /app/data), and naming it "oxide" would
+    # hand over the residual-accounting mechanism for free. See README.md,
+    # "Oxidative wear mechanism" -> "Why the labels are neutral".
+    path = OUT_DIR / "surface_layer_reference.csv"
+    with open(path, "w", newline="") as f:
+        f.write("reference_grain_size_um,temperature_C,time_s,layer_thickness_nm\n")
+        for d, T, t, x in rows:
+            f.write(f"{d:.1f},{T:.0f},{t:.0f},{x:.2f}\n")
+    print(f"wrote {path}: {len(rows)} rows")
+    return rows
+
+# --- contact temperature logs (thermocouple trace, ramp to steady state) ---
+T_AMBIENT_C = 22.0
+T_STEADY_C = 350.0
+TAU_S = 300.0
+
+RAMP_SAMPLE_STEP_S = 30
+RAMP_DURATION_S = 1800
+STEADY_SAMPLE_STEP_S = 1800
+
+def write_temp_log(tag, seed, total_time_s):
+    rng = np.random.default_rng(seed)
+    times = list(range(0, RAMP_DURATION_S + 1, RAMP_SAMPLE_STEP_S))
+    t = RAMP_DURATION_S + STEADY_SAMPLE_STEP_S
+    while t < total_time_s:
+        times.append(t)
+        t += STEADY_SAMPLE_STEP_S
+    times.append(int(total_time_s))
+
+    path = OUT_DIR / f"contact_temperature_log_{tag}.csv"
+    with open(path, "w", newline="") as f:
+        f.write("time_s,contact_temperature_C\n")
+        for tt in times:
+            T_true = T_AMBIENT_C + (T_STEADY_C - T_AMBIENT_C) * (1.0 - math.exp(-tt / TAU_S))
+            noise_scale = 2.5 if tt > RAMP_DURATION_S else 4.0
+            T_meas = T_true + rng.normal(0.0, noise_scale)
+            f.write(f"{tt},{T_meas:.2f}\n")
+    print(f"wrote {path}: {len(times)} rows")
+
+
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    write_oxide_reference()
+
+    with open(TRUTH_FILE) as f:
+        truth = json.load(f)
+
+    D_ring_mm = 34.99
+    block_width_mm = 6.35
+    rpm = 72.0
+    circumference_mm = math.pi * D_ring_mm
+    v_mm_s = circumference_mm * rpm / 60.0
+    revolution_period_s = 60.0 / rpm
+    contact_time_s = block_width_mm / v_mm_s
+    regrowth_time_s = revolution_period_s - contact_time_s
+
+    s_m = truth["test_conditions"]["s_m"]
+    total_time_s = s_m / (v_mm_s / 1000.0)
+
+    write_temp_log("a", 4601, total_time_s)
+    write_temp_log("b", 4602, total_time_s)
+
+    rig_path = OUT_DIR / "test_rig_geometry.csv"
+    with open(rig_path, "w", newline="") as f:
+        f.write("parameter,value,unit\n")
+        f.write(f"cylinder_diameter,{D_ring_mm},mm\n")
+        f.write(f"counterface_block_contact_length,{block_width_mm},mm\n")
+        f.write(f"rotational_speed,{rpm:.0f},rpm\n")
+    print(f"wrote {rig_path}")
+
+    d_a_true_mm = truth["grain_size"]["d_a_true_mm"]
+    d_b_true_mm = truth["grain_size"]["d_b_true_mm"]
+    d_a_um = d_a_true_mm * 1000.0
+    d_b_um = d_b_true_mm * 1000.0
+
+    X_a_nm = oxide_thickness_nm(T_STEADY_C, d_a_um, regrowth_time_s)
+    X_b_nm = oxide_thickness_nm(T_STEADY_C, d_b_um, regrowth_time_s)
+
+    truth["oxidation"] = {
+        "rig_geometry": {
+            "cylinder_diameter_mm": D_ring_mm,
+            "counterface_block_contact_length_mm": block_width_mm,
+            "rotational_speed_rpm": rpm,
+            "revolution_period_s": round(revolution_period_s, 6),
+            "contact_time_s": round(contact_time_s, 6),
+            "regrowth_time_s": round(regrowth_time_s, 6),
+        },
+        "contact_temperature_C_true": T_STEADY_C,
+        "specimen_a": {"oxide_regrowth_per_revolution_nm_true": round(X_a_nm, 2)},
+        "specimen_b": {"oxide_regrowth_per_revolution_nm_true": round(X_b_nm, 2)},
+        "reference_grain_size_um": D_REF_UM,
+        "critical_oxide_thickness_um": 1.0,
+    }
+    with open(TRUTH_FILE, "w") as f:
+        json.dump(truth, f, indent=2)
+    print(f"updated {TRUTH_FILE} with oxidation truths")
+    print(f"  X_a={X_a_nm:.2f} nm   X_b={X_b_nm:.2f} nm   (critical = 1000 nm)")
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="authoring/provenance/dataset/generate_microstructure.py">
+import json
+import math
+import sys
+from pathlib import Path
+
+import numpy as np
+from PIL import Image
+from scipy import ndimage
+
+BUNDLE = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[3]
+OUT_DIR = BUNDLE / "environment/data"
+TRUTH_FILE = BUNDLE / "tests/ground_truth.json"
+
+PX_UM = 0.5  # image scale: microns per pixel
+D_CONV = 1.128  # d = D_CONV * mean linear intercept (equiaxed grains)
+
+# specimen A: coarse grains; specimen B: fine grains
+SPEC = {"a": (4201, 80), "b": (4202, 21)}  # (seed, lattice spacing px ~ target intercept)
+
+
+def build_grain_image(seed, spacing):
+    rng = np.random.default_rng(seed)
+    rng = np.random.default_rng(seed)
+    H, W = 600, 900
+    j = spacing * 0.30
+    seeds = []
+    for ci in range(int(np.floor(W / spacing)) + 2):
+        for cj in range(int(np.floor(H / spacing)) + 2):
+            x = (ci + 0.5) * spacing + rng.uniform(-j, j)
+            y = (cj + 0.5) * spacing + rng.uniform(-j, j)
+            if 0 <= x < W and 0 <= y < H:
+                seeds.append((x, y))
+    seeds = np.array(seeds)
+    xs, ys = np.meshgrid(np.arange(W), np.arange(H))
+    labels = np.full((H, W), -1, dtype=np.int32)
+    for y0 in range(0, H, 60):
+        sy = slice(y0, min(y0 + 60, H))
+        gx = xs[sy].astype(np.float64).ravel()
+        gy = ys[sy].astype(np.float64).ravel()
+        min_d = np.full(gx.shape, np.inf)
+        lab_slab = np.zeros(gx.shape, dtype=np.int32)
+        for ci, chunk in enumerate(range(0, len(seeds), 4000)):
+            sc = seeds[chunk : chunk + 4000]
+            d2 = (gx[:, None] - sc[:, 0][None, :]) ** 2 + (gy[:, None] - sc[:, 1][None, :]) ** 2
+            if ci == 0:
+                lab_slab[:] = chunk + np.argmin(d2, axis=1)
+                min_d = np.min(d2, axis=1)
+            else:
+                b = d2 < min_d[:, None]
+                lab = np.argmax(b, axis=1)
+                better = np.any(b, axis=1)
+                lab_slab[better] = (chunk + lab)[better]
+                min_d = np.minimum(min_d, np.min(d2, axis=1))
+        labels[sy] = lab_slab.reshape(sy.stop - sy.start, W)
+
+    # grain boundaries = any pixel whose label differs from a 4-neighbour
+    bdry = np.zeros((H, W), dtype=bool)
+    bdry[:-1, :] = labels[1:, :] != labels[:-1, :]
+    bdry[1:, :] |= labels[:-1, :] != labels[1:, :]
+    bdry[:, :-1] |= labels[:, 1:] != labels[:, :-1]
+    bdry[:, 1:] |= labels[:, :-1] != labels[:, 1:]
+    bdry[0, :] = True
+    bdry[-1, :] = True
+    bdry[:, 0] = True
+    bdry[:, -1] = True
+
+    # render: per-grain intensity + etched boundary lines (dark, thickened)
+    grain_val = rng.normal(128.0, 16.0, size=(labels.max() + 1,))
+    img = grain_val[labels].astype(np.float64)
+    bdry_thick = ndimage.binary_dilation(bdry, iterations=1)
+    img[bdry_thick] = 42.0
+
+    # a few decoys: grain-like dark pits and bright carbide specks inside grains
+    for _ in range(rng.integers(3, 5)):
+        cx, cy = int(rng.integers(10, W - 10)), int(rng.integers(10, H - 10))
+        r = int(rng.integers(2, 6))
+        yy, xx = np.ogrid[: H, : W]
+        circ = (yy - cy) ** 2 + (xx - cx) ** 2 <= r * r
+        img[circ] = 55.0
+    for _ in range(rng.integers(4, 8)):
+        cx, cy = int(rng.integers(0, W)), int(rng.integers(0, H))
+        img[cy - 1 : cy + 2, cx - 1 : cx + 2] = 230.0
+
+    img = img + rng.normal(0.0, 9.0, size=(H, W))
+    salt = rng.random((H, W)) < 0.002
+    img[salt] = rng.choice([20.0, 240.0], size=salt.sum())
+    img = np.clip(img, 0.0, 255.0).astype(np.uint8)
+    return labels, bdry, img
+
+
+def measure_intercept_px(bdry, crop=8):
+    """ASTM-style intercept counting: mean linear intercept via run-starts of the
+    boundary map on full test lines (rows and columns), frame fringe cropped."""
+    b = bdry[crop:-crop, crop:-crop]
+    Hc, Wc = b.shape
+    crosses = 0
+    i8 = b.astype(np.int8)
+    crosses += int(np.sum((i8[:, 1:] == 1) & (i8[:, :-1] == 0)))
+    crosses += int(np.sum((i8[1:, :] == 1) & (i8[:-1, :] == 0)))
+    total_len = 2 * Hc * Wc
+    return total_len / max(crosses, 1)
+
+
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    (BUNDLE / "tests").mkdir(parents=True, exist_ok=True)
+    with open(TRUTH_FILE) as f:
+        truth = json.load(f)
+
+    saved = {}
+    for tag, (seed, spacing) in SPEC.items():
+        labels, bdry, img = build_grain_image(seed, spacing)
+        L_px = measure_intercept_px(bdry)
+        L_um = L_px * PX_UM
+        d_mm = D_CONV * L_um * 1.0e-3
+        Image.fromarray(img).save(OUT_DIR / f"microstructure_{tag}.png")
+        saved[f"L_{tag}_px"] = L_px
+        saved[f"L_{tag}_um"] = L_um
+        saved[f"d_{tag}_true_mm"] = d_mm
+        print(f"microstructure_{tag}: L={L_um:.2f} um  d_true={d_mm*1e3:.2f} um")
+
+    dA = saved["d_a_true_mm"]
+    dB = saved["d_b_true_mm"]
+    H0, kH = truth["hall_petch"]["H0_HV"], truth["hall_petch"]["k_HV_mm_half"]
+    truth["grain_size"] = {
+        "d_a_true_mm": round(dA, 7),
+        "d_b_true_mm": round(dB, 7),
+        "mean_intercept_a_um": round(saved["L_a_um"], 3),
+        "mean_intercept_b_um": round(saved["L_b_um"], 3),
+        "d_to_intercept_factor": D_CONV,
+        "pixel_size_mm": PX_UM * 1e-3,
+    }
+    truth["hardness"] = {
+        "H_a_true_HV": round(H0 + kH / math.sqrt(dA), 2),
+        "H_b_true_HV": round(H0 + kH / math.sqrt(dB), 2),
+    }
+    with open(TRUTH_FILE, "w") as f:
+        json.dump(truth, f, indent=2)
+    print(f"updated {TRUTH_FILE} with grain-size and hardness truths")
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="authoring/provenance/dataset/generate_wear_surfaces.py">
+import json
+import math
+import sys
+from pathlib import Path
+
+import numpy as np
+
+BUNDLE = Path(sys.argv[1]) if len(sys.argv) > 1 else Path(__file__).resolve().parents[3]
+OUT_DIR = BUNDLE / "environment/data"
+TRUTH_FILE = BUNDLE / "tests/ground_truth.json"
+
+R = 3.0      # cylinder radius mm
+LX = 6.0     # scan width transverse to sliding, mm
+LY = 8.0     # scan length along sliding, mm
+PITCH = 0.02
+
+SPECS = {
+    # specimen_a: coarse grains -> more wear (deeper groove); true volume
+    # includes a deliberate excess beyond clean Hall-Petch/Archard closure
+    # (see authoring/provenance/dataset/generate_oxidation.py) representing a
+    # partial transition to severe oxidative wear at this contact temperature.
+    "a": {"seed": 4301, "h": 0.173638,
+          "patches": [(1.9, 2.1, 0.30, 0.72), (5.7, 5.92, 4.9, 5.3)],
+          "shoulder": {"lo": 0.05, "hi": 0.55, "peak": 0.16}},
+    # specimen_b: fine grains -> less wear
+    "b": {"seed": 4302, "h": 0.113,
+          "patches": [(3.3, 3.52, 5.1, 5.55), (6.1, 6.25, 1.2, 1.6)],
+          "shoulder": {"lo": 0.05, "hi": 0.55, "peak": 0.16}},
+}
+
+
+def seg_area(h):
+    return R * R * math.acos((R - h) / R) - (R - h) * math.sqrt(2.0 * R * h - h * h)
+
+
+def make_scan(tag, cfg):
+    rng = np.random.default_rng(cfg["seed"])
+    h = cfg["h"]
+    chord = 2.0 * math.sqrt(2.0 * R * h - h * h)
+    volume = seg_area(h) * LY
+
+    xs = np.round(np.arange(0.0, LX + PITCH / 2.0, PITCH), 6)
+    ys = np.round(np.arange(0.0, LY + PITCH / 2.0, PITCH), 6)
+    nx, ny = len(xs), len(ys)
+    cx = LX / 2.0
+
+    z = np.zeros((ny, nx), dtype=np.float64)
+    yc_arr = ys
+    for iy in range(ny):
+        yc = yc_arr[iy]
+        row = np.abs(xs - cx)
+        inside = row <= chord / 2.0
+        drop = (R - h) - np.sqrt(np.maximum(R * R - row * row, 0.0))
+        clip = np.minimum((row / (chord / 2.0)) ** 4, 1.0)
+        groove = drop - 0.0015 * np.sin(2.0 * np.pi * yc / 0.25) * clip
+        z[iy, inside] = groove[inside]
+
+    tilt = 0.018 * (xs[None, :] - cx) + 0.012 * (ys[:, None] - LY / 2.0)
+    z = z + tilt
+
+    # Transferred material: displaced-material shoulders proud of the undamaged
+    # surface flanking the track. A baseline fitted over them (naive) is biased
+    # high and under-reports the worn volume.
+    sh = cfg["shoulder"]
+    if sh:
+        for iy in range(ny):
+            d = np.abs(xs - cx) - chord / 2.0
+            band = (d >= sh["lo"]) & (d <= sh["hi"])
+            amp = sh["peak"] * np.maximum(0.0, 1.0 - (d[band] - sh["lo"]) / (sh["hi"] - sh["lo"]))
+            amp = amp * (1.0 + 0.06 * np.sin(2.0 * np.pi * ys[iy] / 0.5))
+            z[iy, band] += amp
+
+    z = z + rng.normal(0.0, 1.5e-3, z.shape)
+    spike_count = 7
+    for _ in range(spike_count):
+        for _try in range(200):
+            ix = int(rng.integers(0, nx))
+            iy = int(rng.integers(0, ny))
+            if abs(xs[ix] - cx) > chord / 2.0 + 0.15:
+                z[iy, ix] += float(rng.uniform(0.025, 0.07))
+                break
+    for (ylo, yhi, xlo, xhi) in cfg["patches"]:
+        for iy in range(ny):
+            if ylo <= ys[iy] <= yhi:
+                mm = (xs >= xlo) & (xs <= xhi)
+                z[iy, mm] = np.nan
+
+    path = OUT_DIR / f"wear_surface_{tag}.csv"
+    with open(path, "w", newline="") as f:
+        f.write("x_mm,y_mm,z_mm\n")
+        for iy in range(ny):
+            for ix in range(nx):
+                zz = z[iy, ix]
+                if math.isnan(zz):
+                    f.write(f"{xs[ix]:.6f},{ys[iy]:.6f},\n")
+                else:
+                    f.write(f"{xs[ix]:.6f},{ys[iy]:.6f},{zz:.6f}\n")
+    print(f"{tag}: h={h} chord={chord:.4f} V_true={volume:.4f} mm3 rows={ny*nx}")
+    return {"volume_mm3": volume, "chord_mm": chord, "h_mm": h}
+
+
+def main():
+    OUT_DIR.mkdir(parents=True, exist_ok=True)
+    with open(TRUTH_FILE) as f:
+        truth = json.load(f)
+
+    fn = truth["test_conditions"]["Fn_N"]
+    s = truth["test_conditions"]["s_m"]
+    wear = {}
+    for tag, cfg in SPECS.items():
+        m = make_scan(tag, cfg)
+        k = m["volume_mm3"] / (fn * s)
+        wear[f"specimen_{tag}"] = {
+            "volume_true_mm3": round(m["volume_mm3"], 5),
+            "chord_true_mm": round(m["chord_mm"], 5),
+            "h_true_mm": m["h_mm"],
+            "k_true_mm3_Nm": k,
+        }
+        print(f"  k_{tag}={k:.4e} mm3/Nm")
+    truth["wear"] = wear
+    with open(TRUTH_FILE, "w") as f:
+        json.dump(truth, f, indent=2)
+    print(f"updated {TRUTH_FILE} with wear truths")
+
+
+if __name__ == "__main__":
+    main()
+</file>
+
+<file path="environment/Dockerfile">
+FROM python:3.13-slim-bookworm
+
+WORKDIR /app
+
+RUN pip install --no-cache-dir \
+    numpy==2.2.3 \
+    pandas==2.2.3 \
+    scipy==1.15.1 \
+    pillow==11.1.0 \
+    && rm -rf /root/.cache/pip
+
+RUN mkdir -p /app/data /app/output
+
+COPY data/ /app/data/
+</file>
+
+</gold_standard_template>

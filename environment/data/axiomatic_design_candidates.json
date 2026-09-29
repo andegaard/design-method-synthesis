@@ -1,0 +1,129 @@
+{
+  "designs": {
+    "X": {
+      "description": "rod-guided compression spring: separate guide rod for stability, squared-and-ground end for the assembly stop",
+      "matrix": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.6,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.4,
+          1.0
+        ]
+      ],
+      "process_data": {
+        "FR1": [
+          39.0,
+          51.0,
+          45.5,
+          2.2
+        ],
+        "FR2": [
+          0.0,
+          0.3,
+          0.17,
+          0.05
+        ],
+        "FR3": [
+          8.0,
+          16.0,
+          12.5,
+          1.3
+        ]
+      }
+    },
+    "Z": {
+      "description": "hole-guided compression spring: external sleeve doubles as both guide and force reaction, single-feature end geometry",
+      "matrix": [
+        [
+          1.0,
+          0.0,
+          0.0
+        ],
+        [
+          0.0,
+          1.0,
+          0.0
+        ],
+        [
+          0.0,
+          0.0,
+          1.0
+        ]
+      ],
+      "process_data": {
+        "FR1": [
+          39.0,
+          51.0,
+          44.0,
+          1.6
+        ],
+        "FR2": [
+          0.0,
+          0.3,
+          0.14,
+          0.04
+        ],
+        "FR3": [
+          8.0,
+          16.0,
+          13.5,
+          2.0
+        ]
+      }
+    },
+    "Y": {
+      "description": "unguided free-standing spring with a single integrated geometry parameter set intended to control force, stability and assembly simultaneously",
+      "matrix": [
+        [
+          1.0,
+          0.7,
+          0.5
+        ],
+        [
+          0.6,
+          1.0,
+          0.6
+        ],
+        [
+          0.5,
+          0.7,
+          1.0
+        ]
+      ],
+      "process_data": {
+        "FR1": [
+          39.0,
+          51.0,
+          45.0,
+          1.0
+        ],
+        "FR2": [
+          0.0,
+          0.3,
+          0.15,
+          0.025
+        ],
+        "FR3": [
+          8.0,
+          16.0,
+          12.0,
+          0.75
+        ]
+      }
+    }
+  },
+  "fr_definitions": {
+    "FR1": "retention force at operating deflection (N)",
+    "FR2": "lateral deflection under a 10 N side load (mm)",
+    "FR3": "tool-free assembly insertion force (N)"
+  }
+}

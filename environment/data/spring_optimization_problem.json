@@ -1,0 +1,190 @@
+{
+  "variables": [
+    "d_mm",
+    "D_mm",
+    "Na"
+  ],
+  "bounds": {
+    "d_mm": [
+      0.5,
+      2.0
+    ],
+    "D_mm": [
+      4.0,
+      14.0
+    ],
+    "Na": [
+      2.0,
+      30.0
+    ]
+  },
+  "material_options": {
+    "D1": {
+      "name": "particulate-reinforced Ni-alloy matrix wire (low reinforcement fraction)",
+      "G_Nmm2": 79000.0,
+      "tau_allow_Nmm2": 590.0,
+      "S_se_base_Nmm2": 380.0,
+      "S_su_Nmm2": 1290.0,
+      "matrix_alpha_per_C": 1.58e-05,
+      "matrix_K_Nmm2": 158000.0,
+      "matrix_E_Nmm2": 205000.0,
+      "reinforcement_alpha_per_C": 6.9e-06,
+      "reinforcement_K_Nmm2": 290000.0,
+      "reinforcement_vol_fraction": 0.1,
+      "matrix_density_kg_m3": 8400.0,
+      "reinforcement_density_kg_m3": 4930.0
+    },
+    "D2": {
+      "name": "particulate-reinforced Fe-alloy matrix wire (high reinforcement fraction)",
+      "G_Nmm2": 69500.0,
+      "tau_allow_Nmm2": 520.0,
+      "S_se_base_Nmm2": 310.0,
+      "S_su_Nmm2": 1100.0,
+      "matrix_alpha_per_C": 1.72e-05,
+      "matrix_K_Nmm2": 140000.0,
+      "matrix_E_Nmm2": 193000.0,
+      "reinforcement_alpha_per_C": 4.6e-06,
+      "reinforcement_K_Nmm2": 310000.0,
+      "reinforcement_vol_fraction": 0.22,
+      "matrix_density_kg_m3": 7870.0,
+      "reinforcement_density_kg_m3": 4930.0
+    },
+    "D3": {
+      "name": "particulate-reinforced Fe-Cr-alloy matrix wire (moderate reinforcement fraction)",
+      "G_Nmm2": 79300.0,
+      "matrix_alpha_per_C": 1.08e-05,
+      "matrix_K_Nmm2": 172000.0,
+      "matrix_E_Nmm2": 207000.0,
+      "reinforcement_alpha_per_C": 5.6e-06,
+      "reinforcement_K_Nmm2": 265000.0,
+      "reinforcement_vol_fraction": 0.24,
+      "matrix_density_kg_m3": 7750.0,
+      "reinforcement_density_kg_m3": 4930.0
+    }
+  },
+  "end_fixation_buckling_limits": {
+    "C1": 2.6,
+    "C2": 4.0,
+    "C3": 4.5
+  },
+  "wire_treatments": {
+    "unpeened": {
+      "S_se_multiplier": 1.0,
+      "relative_cost_multiplier": 1.0
+    },
+    "peened": {
+      "S_se_multiplier": 1.35,
+      "relative_cost_multiplier": 1.2
+    }
+  },
+  "tempering_response": [
+    {
+      "temper_temp_C": 200.0,
+      "hardness_HRC": 52.0,
+      "S_su_Nmm2": 1520.0,
+      "S_se_base_Nmm2": 473.0,
+      "tau_allow_Nmm2": 698.0,
+      "charpy_impact_J": 8.0
+    },
+    {
+      "temper_temp_C": 300.0,
+      "hardness_HRC": 49.0,
+      "S_su_Nmm2": 1430.0,
+      "S_se_base_Nmm2": 445.0,
+      "tau_allow_Nmm2": 657.0,
+      "charpy_impact_J": 6.5
+    },
+    {
+      "temper_temp_C": 370.0,
+      "hardness_HRC": 46.0,
+      "S_su_Nmm2": 1350.0,
+      "S_se_base_Nmm2": 420.0,
+      "tau_allow_Nmm2": 620.0,
+      "charpy_impact_J": 18.0
+    },
+    {
+      "temper_temp_C": 430.0,
+      "hardness_HRC": 42.0,
+      "S_su_Nmm2": 1230.0,
+      "S_se_base_Nmm2": 383.0,
+      "tau_allow_Nmm2": 565.0,
+      "charpy_impact_J": 28.0
+    },
+    {
+      "temper_temp_C": 480.0,
+      "hardness_HRC": 38.0,
+      "S_su_Nmm2": 1100.0,
+      "S_se_base_Nmm2": 342.0,
+      "tau_allow_Nmm2": 505.0,
+      "charpy_impact_J": 35.0
+    },
+    {
+      "temper_temp_C": 540.0,
+      "hardness_HRC": 34.0,
+      "S_su_Nmm2": 980.0,
+      "S_se_base_Nmm2": 305.0,
+      "tau_allow_Nmm2": 450.0,
+      "charpy_impact_J": 42.0
+    },
+    {
+      "temper_temp_C": 600.0,
+      "hardness_HRC": 30.0,
+      "S_su_Nmm2": 860.0,
+      "S_se_base_Nmm2": 268.0,
+      "tau_allow_Nmm2": 395.0,
+      "charpy_impact_J": 48.0
+    }
+  ],
+  "requirements": {
+    "F_op_N": 55.0,
+    "delta_req_mm": 18.0,
+    "D_max_mm": 14.0,
+    "spring_index_max": 12.0,
+    "oversupply_factor": 1.5,
+    "F_min_N": 8.0,
+    "fatigue_safety_factor": 1.15,
+    "clash_allowance_mm": 2.0,
+    "operating_temp_C": 85.0,
+    "material_reference_temp_C": 20.0,
+    "strength_derating_fraction_per_C": 0.0015,
+    "composite_process_temp_C": 600.0,
+    "operating_actuation_frequency_hz": 20.0,
+    "frequency_safety_margin": 15.0,
+    "frequency_alternative_cost_cap_multiplier": 1.15,
+    "basquin_fatigue_strength_coefficient_Nmm2": 1650.0,
+    "basquin_fatigue_strength_exponent": -0.09,
+    "rated_qualification_cycles": 50000,
+    "charpy_min_toughness_J": 15.0
+  },
+  "objective": "minimize cost(d, D, Na, treatment) = relative_cost_multiplier(treatment) * (pi^2/4) * d^2 * D * (Na + 2)  [relative material cost; squared-and-ground ends -> Na+2 total coils]",
+  "physical_relations": [
+    "Wahl's stress-concentration factor for a round-wire helical spring applies wherever spring stress is computed below, as a function of the spring index C = D/d.",
+    "Peak shear stress in the wire under an applied axial force F follows the standard closed-form relation for a round-wire helical compression spring, incorporating the Wahl factor above.",
+    "Spring rate follows the standard closed-form relation for a round-wire helical compression spring (force per unit deflection), as a function of shear modulus G, wire diameter d, mean coil diameter D, and active coil count Na.",
+    "Fatigue (infinite-life criterion): under a force that cycles between F_min and F_max, the mean and alternating force components are the average and half-range of F_min and F_max; the corresponding mean and alternating shear stresses follow the peak-shear-stress relation above. Because that relation is linear in force, the load line is proportional (passes through the origin), so the standard linear (modified-Goodman) shear-stress damage criterion for proportional loading applies: normalize the alternating stress against the endurance limit S_se and the mean stress against the ultimate shear strength S_su, sum the two ratios, and require the sum not exceed the reciprocal of the required safety factor n_f. The mean-stress term must use tau_m_total, the service mean shear stress tau_m plus the composite's own thermal residual shear stress tau_res defined below -- not tau_m alone.",
+    "Fatigue (finite-life criterion, an alternative to the infinite-life criterion above): Basquin's equation relates the allowable fully-reversed alternating stress to a target cycle count via a fatigue-strength coefficient and exponent (given below); at a stated rated qualification cycle count it gives an allowable alternating stress in place of the endurance limit S_se in the same mean/alternating damage-sum criterion above, still subject to the same wire-treatment multiplier and safety factor. This finite-life criterion is not automatically the right or wrong choice relative to the infinite-life one above -- which one governs is stated in requirements_text below.",
+    "Both fatigue strengths derate linearly with operating temperature above the temperature the material was characterized at, by strength_derating_fraction_per_C per degree C of temperature rise, applied to both S_se and S_su before any other adjustment; the finite-life allowable stress above is not itself temperature-derated by this factor, since it is not S_se, but does carry the same wire-treatment multiplier described next.",
+    "Shot peening multiplies only the endurance limit S_se -- and, for a design using the finite-life criterion above, the Basquin-derived allowable alternating stress the same way -- by the treatment's S_se_multiplier (it does not affect tau_allow or S_su); the treatment's relative_cost_multiplier scales the objective's material cost per unit volume.",
+    "Free length and lateral stability: solid height Ls = (Na+2)*d; free length L0 = Ls + delta_req_mm + clash_allowance_mm. A helical compression spring becomes unstable against lateral buckling once its slenderness ratio L0/D exceeds a critical value that depends on how the spring's ends are restrained against tipping -- more restraint tolerates a more slender spring before buckling.",
+    "Composite effective CTE: each wire is a two-phase particulate composite (matrix phase m, reinforcement phase r, volume fractions V_m + V_r = 1). Its homogenized effective coefficient of thermal expansion follows Turner's classical self-consistent homogenization model, weighting each phase's own CTE by its volume fraction and its own bulk modulus.",
+    "Composite thermal residual stress: because the matrix and reinforcement phases contract by different amounts on cooling from the composite's processing temperature composite_process_temp_C to the reference temperature material_reference_temp_C, a residual normal stress is locked into the matrix. Estimate it by the standard constrained-mismatch approach -- proportional to the reinforcement's volume ratio V_r/(1-V_r), the matrix phase's own Young's modulus E_m, and the two phases' CTE mismatch (alpha_m - alpha_r) times the temperature drop (T_process - T_ref) -- then convert that normal stress to a shear-equivalent by the von Mises relation. This residual shear stress tau_res adds directly to the mean shear stress tau_m in the fatigue criterion above; it is fixed by the composite's own processing history, so it applies regardless of wire treatment and does not depend on the later operating temperature T_op.",
+    "Composite mass density: the homogenized density of the two-phase wire follows the standard rule of mixtures, weighting each phase's own mass density by its volume fraction.",
+    "Fundamental natural frequency: a helical compression spring with both ends fixed against rotation has a classical spring-surge natural frequency, increasing with wire diameter d and with sqrt(shear modulus / mass density), and decreasing with mean coil diameter D and active coil count Na. Use the composite's own homogenized density rho_eff from above as the mass density, and take care with units -- d and D are given in mm, G in N/mm^2, and rho_eff in kg/m^3 -- to report the result in Hz.",
+    "Process robustness: taguchi_spring_robustness.csv already characterizes this same spring family's wire-diameter and active-coil manufacturing-tolerance noise, as the named 'low' and 'high' offsets from each run's nominal d and Na (mean coil diameter D carries no noise in that study, deliberately). That same noise applies to any (d, D, Na) design at this stage, not only to the nine runs that CSV happens to tabulate.",
+    "Heat treatment: the selected material's matrix alloy is temper-hardened after consolidation. tempering_response gives its static allowable stress, ultimate strength, and endurance limit -- the same three properties D1/D2 give directly in material_options -- plus hardness and Charpy V-notch impact toughness, at each of several discrete tempering temperatures. Each row stands on its own as a complete, internally consistent set of properties for that tempering condition; higher tempering temperature does not monotonically improve or worsen every property together."
+  ],
+  "requirements_text": [
+    "The spring must deliver at least F_op_N of force at a deflection of delta_req_mm, and must not deliver more than oversupply_factor * F_op_N at that same deflection.",
+    "The peak static shear stress (at the fully engaged force F_op_N) must not exceed the allowable stress of the material selected in the concept-selection stage.",
+    "In service the spring cycles between F_min_N and F_op_N on every latch actuation; the infinite-life fatigue damage criterion above must be satisfied with safety factor fatigue_safety_factor, using temperature-derated strengths at operating_temp_C, the composite wire's own thermal residual shear stress, and whichever wire-treatment option is used for that design -- this is the fatigue criterion the minimum-cost design (below) must satisfy; it is not a judgment call.",
+    "The mean coil diameter D must fit within the housing bore, D <= D_max_mm.",
+    "The spring index D/d must not exceed spring_index_max, or the spring cannot be reliably coiled by the intended process.",
+    "The spring's slenderness ratio L0/D must not exceed the buckling limit for the end-fixation variant selected in the concept-selection stage.",
+    "The spring's own fundamental natural frequency must be at least frequency_safety_margin times operating_actuation_frequency_hz, so that repeated latch actuation cannot excite spring surge.",
+    "The minimum-cost design (and the frequency-optimized alternative below, on whichever of its own requirements do not concern the frequency floor itself) must also remain feasible under the process-robustness noise described above: re-evaluate the fatigue, buckling, and frequency-margin requirements at whichever combination of +/- that noise on d and Na is actually worst-case for each requirement separately -- the worst-case direction is not necessarily the same for all three, and identifying it for each is a matter of engineering reasoning about how that requirement responds to a thinner-or-thicker wire and a lower-or-higher coil count, not something stated here.",
+    "Report the selected material's effective coefficient of thermal expansion from Turner's model, and its homogenized mass density, as part of the parametric-optimization result.",
+    "Separately from the minimum-cost design, determine the maximum-natural-frequency design that uses the same wire treatment as the minimum-cost design and satisfies every requirement above except the frequency floor itself (and the process-robustness re-check of that floor specifically -- the process-robustness re-checks of fatigue and buckling still apply), while its cost does not exceed frequency_alternative_cost_cap_multiplier times the minimum-cost design's own cost -- and report whether this frequency-optimized alternative is actually a different design from the minimum-cost one. For this alternative design only, and not for the minimum-cost design, choosing between the infinite-life and finite-life fatigue criteria above is a genuine judgment call: the finite-life criterion is only as good as the rated qualification cycle count it is pinned to, and is a defensible choice precisely when that stated rating -- not an unbounded service life -- is what the design is actually being qualified against; state and justify whichever criterion is used for this alternative as part of the synthesis explanation.",
+    "The tempering condition used for the selected material's wire must be chosen from tempering_response and must clear charpy_min_toughness_J; among the tempering conditions that do, and jointly with both wire-treatment options, the minimum-cost design above must be the global minimum over every combination of the two -- not assumed from the highest-strength condition alone, and not decided independently of the wire-treatment choice."
+  ],
+  "notes": "d, D in mm, Na dimensionless (treated as continuous for optimization purposes). The relations and requirements above are given as physical facts, not as pre-derived inequality functions -- expressing them as constraints g(d, D, Na) <= 0, identifying which material and end-fixation rows apply, deriving the composite's effective CTE, thermal residual stress, and homogenized density from its constituent phases, recovering the process-robustness noise magnitudes from taguchi_spring_robustness.csv, and comparing both wire-treatment options is part of solving this stage."
+}
