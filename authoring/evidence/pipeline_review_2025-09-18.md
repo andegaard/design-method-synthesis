@@ -47,3 +47,10 @@ The pipeline flagged 8/8 trials. Every trial was scientifically correct, and eve
 - Oracle re-run on current files: 36/36 with real pytest. Empty output: 0/36.
 - `test_explanation_content` reduced to a length check and the "disagree" keyword check replaced by a structural `methods_agree` consistency check. A report with correct numbers and a keyword-free 400-character explanation now passes 36/36.
 - The 8-trial run audit above predates these changes and the current `instruction.md` wording, so it must be rerun. Its 8/8 scientifically-correct results also mean the task is likely too easy once the gate is gone.
+
+## Follow-up 2: Taguchi selection now feeds later stages (factor E)
+
+- L9 array gained factor E (forming setup); its level scales the noise offsets (x1.0/1.5/2.0). Robust setup E1 reproduces the +/-0.015 mm / +/-0.2 coil noise used downstream, so downstream ground truth is unchanged. Changed truth: Taguchi SN values, factor averages (now with E), on-target loss (0.7214). Robust (A3 B2 C1 E1) still differs from on-target (run 7: A3 B1 C3 E2).
+- Oracle: 37/37 (real pytest); empty output: 0/37.
+- Wrong routes (local simulation, not an agent probe): on-target setup E2 -> 6 checks fail (parametric cost, constraints, all four final-selection checks); pooled noise fit -> 4 fail (final-selection only).
+- Difficulty is NOT yet re-measured: run the pipeline / a baseline-agent probe against this version.

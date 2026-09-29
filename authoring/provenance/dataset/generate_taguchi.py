@@ -9,11 +9,16 @@ manufacturing-tolerance noise sources, or does it drift?
 
   spring rate k = G * d^4 / (8 * D^3 * N)     (G = 80000 N/mm^2, fixed)
 
-Inner array: 3 control factors x 3 levels each (L9).
-Outer array: 3 *named* noise conditions (not random draws) --
-  "low"  : wire diameter -0.015 mm, active coils -0.2   (cold / under-count)
+Inner array: 4 control factors x 3 levels each (L9): A, B, C as above plus
+E, a forming-process setup whose level sets how large the wire-diameter and
+active-coil tolerance offsets are (level 1 the tightest, level 3 the loosest).
+Outer array: 3 *named* noise conditions (not random draws), whose offsets
+scale with the run's E level (E1 x1.0, E2 x1.5, E3 x2.0) --
+  "low"  : wire diameter -0.015*s mm, active coils -0.2*s   (cold / under-count)
   "nom"  : no perturbation
-  "high" : wire diameter +0.015 mm, active coils +0.2   (hot / over-count)
+  "high" : wire diameter +0.015*s mm, active coils +0.2*s   (hot / over-count)
+The most-robust setup (E1) therefore has exactly the +/-0.015 mm / +/-0.2
+offsets the downstream parametric and final-selection stages use.
 d enters k to the 4th power and N enters as 1/N, so a fixed *absolute*
 manufacturing tolerance on d and N has a size-dependent *relative* effect on
 k -- this is the real, physically-grounded reason some factor levels turn
@@ -41,10 +46,12 @@ A_LEVELS = {1: 1.2, 2: 1.4, 3: 1.6}    # wire diameter d, mm
 B_LEVELS = {1: 10.0, 2: 12.0, 3: 14.0}  # coil diameter D, mm
 C_LEVELS = {1: 8, 2: 10, 3: 12}         # active coils N
 
-L9 = [
-    (1, 1, 1), (1, 2, 2), (1, 3, 3),
-    (2, 1, 2), (2, 2, 3), (2, 3, 1),
-    (3, 1, 3), (3, 2, 1), (3, 3, 2),
+E_SCALE = {1: 1.0, 2: 1.5, 3: 2.0}      # forming-setup noise scale
+
+L9 = [  # (A, B, C, E)
+    (1, 1, 1, 1), (1, 2, 2, 2), (1, 3, 3, 3),
+    (2, 1, 2, 3), (2, 2, 3, 1), (2, 3, 1, 2),
+    (3, 1, 3, 2), (3, 2, 1, 3), (3, 3, 2, 1),
 ]
 
 NOISE_CONDITIONS = [
@@ -60,12 +67,13 @@ def spring_rate(d, D, N):
 
 def build_rows():
     rows = []
-    for run_id, (ai, bi, ci) in enumerate(L9, start=1):
+    for run_id, (ai, bi, ci, ei) in enumerate(L9, start=1):
         d, D, N = A_LEVELS[ai], B_LEVELS[bi], C_LEVELS[ci]
+        s = E_SCALE[ei]
         for noise_name, dd, dn in NOISE_CONDITIONS:
-            k = spring_rate(d + dd, D, N + dn)
+            k = spring_rate(d + s * dd, D, N + s * dn)
             rows.append({
-                "run_id": run_id, "A_level": ai, "B_level": bi, "C_level": ci,
+                "run_id": run_id, "A_level": ai, "B_level": bi, "C_level": ci, "E_level": ei,
                 "d_nominal_mm": d, "D_nominal_mm": D, "N_nominal": N,
                 "noise_condition": noise_name, "spring_rate_k_Nmm": round(k, 6),
             })

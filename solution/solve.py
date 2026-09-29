@@ -261,7 +261,7 @@ def _spring_frequency_margin_ratio(x, req):
     return fn / req["operating_actuation_frequency_hz"]
 
 
-def _derive_process_noise(df, G=80000.0):
+def _derive_process_noise(df, e_level, G=80000.0):
     """Recover the Taguchi robust-design study's own wire-diameter and
     active-coil manufacturing-tolerance noise magnitudes directly from
     taguchi_spring_robustness.csv -- the noise is never restated as a
@@ -271,7 +271,14 @@ def _derive_process_noise(df, G=80000.0):
     run's 'low' rows -- and, separately, every run's 'high' rows -- gives an
     over-determined nonlinear least-squares fit for the shared offsets,
     using the same spring-rate relation and reference shear modulus G that
-    stage's own analysis uses."""
+    stage's own analysis uses.
+
+    The offsets are not shared across the whole array: they scale with the
+    run's forming-setup level (E), so the fit is restricted to the runs at
+    the E level the robust-design stage recommends -- that setup is the
+    process the downstream stages are qualified against."""
+    df = df[df["E_level"] == e_level]
+
     def resid(params, rows):
         dd, dn = params
         out = []
@@ -289,6 +296,19 @@ def _derive_process_noise(df, G=80000.0):
     dd_mag = (abs(dd_low) + abs(dd_high)) / 2.0
     dn_mag = (abs(dn_low) + abs(dn_high)) / 2.0
     return dd_mag, dn_mag
+
+
+def _recommended_setup_level(df):
+    """The forming-setup (E) level the robust-design stage recommends: the
+    level with the highest average signal-to-noise ratio."""
+    sn = {}
+    for run_id, grp in df.groupby("run_id"):
+        ks = grp["spring_rate_k_Nmm"].values
+        sn[int(run_id)] = 10 * np.log10(ks.mean()**2 / ks.var(ddof=1))
+    e_of_run = df.groupby("run_id")["E_level"].first()
+    avg = {int(l): np.mean([sn[int(r)] for r in e_of_run.index[e_of_run == l]])
+           for l in sorted(e_of_run.unique())}
+    return int(max(avg, key=avg.get))
 
 
 def _spring_g9_fatigue(x, req, treatment, dd, philosophy="infinite"):
@@ -465,7 +485,7 @@ def analyze_parametric_optimization(morph):
     # Process-robustness noise: recovered from the robust-design stage's own
     # raw measurements, not restated anywhere in spring_optimization_problem.json.
     df_taguchi = pd.read_csv(DATA_DIR / "taguchi_spring_robustness.csv")
-    dd, dn = _derive_process_noise(df_taguchi)
+    dd, dn = _derive_process_noise(df_taguchi, _recommended_setup_level(df_taguchi))
 
     bounds_d = tuple(problem["bounds"]["d_mm"])
     bounds_D = tuple(problem["bounds"]["D_mm"])
@@ -586,10 +606,10 @@ def analyze_taguchi():
         mean_k_by_run[int(run_id)] = float(mean_k)
         row0 = grp.iloc[0]
         levels_by_run[int(run_id)] = {"A": int(row0["A_level"]), "B": int(row0["B_level"]),
-                                       "C": int(row0["C_level"])}
+                                       "C": int(row0["C_level"]), "E": int(row0["E_level"])}
 
     factor_level_avg = {}
-    for factor in ("A", "B", "C"):
+    for factor in ("A", "B", "C", "E"):
         avgs = {}
         for lvl in (1, 2, 3):
             runs = [rid for rid, lv in levels_by_run.items() if lv[factor] == lvl]
@@ -597,7 +617,7 @@ def analyze_taguchi():
         factor_level_avg[factor] = avgs
 
     most_robust_levels = {f: int(max(factor_level_avg[f], key=factor_level_avg[f].get))
-                           for f in ("A", "B", "C")}
+                           for f in ("A", "B", "C", "E")}
 
     A_LEVELS = {1: 1.2, 2: 1.4, 3: 1.6}
     B_LEVELS = {1: 10.0, 2: 12.0, 3: 14.0}
@@ -660,7 +680,7 @@ def analyze_pareto(morph, temper_row):
     df = pd.read_csv(DATA_DIR / "pareto_candidate_designs.csv")
 
     df_taguchi = pd.read_csv(DATA_DIR / "taguchi_spring_robustness.csv")
-    dd, dn = _derive_process_noise(df_taguchi)
+    dd, dn = _derive_process_noise(df_taguchi, _recommended_setup_level(df_taguchi))
 
     def feasible(row):
         d, D, Na = row["d_mm"], row["D_mm"], row["Na"]

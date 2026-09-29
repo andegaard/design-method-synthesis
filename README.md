@@ -147,6 +147,21 @@ rather than inventing a second, disconnected answer for the same question.
 `tests/test_outputs.py::test_synthesis_consistent_with_stage_results` enforces the latter
 directly.
 
+## The Taguchi selection feeds the later stages (factor E)
+
+The L9 array carries a fourth factor, E (forming-process setup), whose level scales the
+wire-diameter/active-coil noise offsets (x1.0, x1.5, x2.0 for E1..E3). The process-robustness
+noise the parametric and final-selection stages must survive is that of the setup the
+robust-design stage recommends (the highest average SN, E1, which reproduces the
++/-0.015 mm / +/-0.2 coil offsets). Three distinct routes therefore diverge: recommending the
+on-target run's looser setup (E2) fails the parametric cost and constraint checks and the
+final-selection checks; fitting one noise pooled over all runs still lands the parametric
+optimum but fails the final-selection checks; only the setup-conditioned fit passes all of
+them. `test_taguchi_setup_level_sets_process_noise` checks that the E level the report names
+is one whose measured offsets equal the noise the downstream truth assumes. Ground truth
+otherwise unchanged except the Taguchi SN values, factor-level averages (now including E) and
+the on-target quality loss (0.7214). This change invalidates any earlier difficulty probe.
+
 ## The parametric-optimization stage gives physics, not a ready-made problem
 
 `spring_optimization_problem.json` does not hand the agent a pre-packaged list of
@@ -306,12 +321,12 @@ Full technical detail is in `authoring/provenance/dataset_manifest.md`; in brief
   infinite-life choice), and the grading is self-consistent: it reads back whichever
   philosophy the report says it used and checks the corresponding sealed target, so either
   well-justified choice can be fully correct -- confirmed directly by constructing a second,
-  swapped report that claims the other philosophy and verifying it also passes all 36 checks.
+  swapped report that claims the other philosophy and verifying it also passes all 37 checks.
 
 ## Verification
 
 The verifier reads only `/app/output/design_report.json` and `findings.md` against a
-sealed reference (`tests/ground_truth.json`) with 36 checks. Every tolerance was chosen
+sealed reference (`tests/ground_truth.json`) with 37 checks. Every tolerance was chosen
 deliberately, not left at a library default:
 
 - Integer/exact fields (morphological totals, coupling classification, run IDs, factor

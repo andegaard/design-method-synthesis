@@ -781,6 +781,27 @@ def test_taguchi_matches_raw_csv():
         assert abs(sn[rid] - expect) <= 0.05, f"run {rid}: {sn[rid]} vs recomputed {expect}"
 
 
+def test_taguchi_setup_level_sets_process_noise():
+    # Cross-stage coupling: the downstream process-robustness noise
+    # (DD_NOISE_MM / DN_NOISE) is that of the forming setup (factor E) the
+    # robust-design stage recommends. The E level the report names must be one
+    # whose own raw measurements are reproduced by exactly that noise; a report
+    # that recommends a looser setup (e.g. the on-target run's) is qualified
+    # against the wrong process.
+    data = load_report()
+    e = data["taguchi"]["most_robust_levels"]["E"]
+    with open(TAGUCHI_CSV, newline="") as f:
+        rows = [r for r in csv.DictReader(f) if int(r["E_level"]) == e]
+    assert rows, f"no runs at E level {e}"
+    sign = {"low": -1.0, "nom": 0.0, "high": 1.0}
+    for r in rows:
+        d = float(r["d_nominal_mm"]) + sign[r["noise_condition"]] * DD_NOISE_MM
+        N = float(r["N_nominal"]) + sign[r["noise_condition"]] * DN_NOISE
+        k = 80000.0 * d**4 / (8 * float(r["D_nominal_mm"])**3 * N)
+        assert abs(k - float(r["spring_rate_k_Nmm"])) <= 1e-4, \
+            f"E level {e} is not the setup the process-robustness noise corresponds to"
+
+
 # -------------------------------------------------------------------- 5. pareto
 def test_pareto_feasibility():
     # Q1 is a deliberate near-miss (infeasible by a small margin on one

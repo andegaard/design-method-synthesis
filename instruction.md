@@ -15,8 +15,8 @@ All inputs are under `/app/data`. Nothing outside this directory may be used.
 - `/app/data/axiomatic_design_candidates.json`
 - `/app/data/spring_optimization_problem.json`
 - `/app/data/taguchi_spring_robustness.csv` -- per-run, per-noise-condition spring-rate
-  measurements for an L9 array over factors A (wire diameter), B (mean coil diameter), and
-  C (active coil count); predicting a run's spring rate from its factor levels uses the
+  measurements for an L9 array over factors A (wire diameter), B (mean coil diameter),
+  C (active coil count), and E (forming-process setup); predicting a run's spring rate from its factor levels uses the
   standard helical-spring-rate relation with shear modulus `G = 80000 N/mm^2`, a reference
   value for this study.
 - `/app/data/pareto_candidate_designs.csv` -- candidate final `(d_mm, D_mm, Na, treatment)`
@@ -38,7 +38,8 @@ All inputs are under `/app/data`. Nothing outside this directory may be used.
   the stated minimum Charpy toughness. The material's constituent data also gives its
   effective CTE, thermal residual stress, and homogenized density, each feeding the fatigue
   and dynamic-response constraints. A feasible design must also withstand the
-  wire-diameter/active-coil noise `taguchi_spring_robustness.csv` characterizes, re-checking
+  wire-diameter/active-coil noise `taguchi_spring_robustness.csv` characterizes for the
+  forming setup the robust-design stage recommends, re-checking
   fatigue, buckling, and frequency margin at each requirement's own worst-case noise
   direction. Report `d`, `D`, `Na`, the winning treatment and tempering temperature, the
   minimum cost, its CTE, density, and natural frequency, and confirm every requirement --
@@ -105,8 +106,8 @@ Write two files:
      `frequency_alternative_fatigue_philosophy` (`"infinite_life"` or `"finite_life"`);
      `constraints_satisfied` (bool)
    - `taguchi` (object): `sn_by_run_db` (object, run ID `"1"`..`"9"` -> SN in dB);
-     `factor_level_sn_avg_db` (object, `"A"`/`"B"`/`"C"` -> {level `"1"`/`"2"`/`"3"` ->
-     average SN}); `most_robust_levels` (object, `"A"`/`"B"`/`"C"` -> level, int);
+     `factor_level_sn_avg_db` (object, `"A"`/`"B"`/`"C"`/`"E"` -> {level `"1"`/`"2"`/`"3"` ->
+     average SN}); `most_robust_levels` (object, `"A"`/`"B"`/`"C"`/`"E"` -> level, int);
      `most_robust_predicted_k_Nmm`, `most_robust_quality_loss` (numbers);
      `best_on_target_run_id` (int); `best_on_target_levels` (object like
      `most_robust_levels`); `best_on_target_quality_loss` (number);
