@@ -397,59 +397,13 @@ def test_required_fields():
 
 
 def test_explanation_content():
+    # The structured fields (coupling, philosophy, both MCDM winners, methods_agree,
+    # robust-vs-on-target flag, ...) grade the science. The free-text explanation is
+    # deliberately not keyword-gated: an agent that reasons correctly but words it
+    # differently from the reference must not fail here. Length only.
     data = load_report()
     expl = data["synthesis"]["explanation"]
     assert isinstance(expl, str) and len(expl) >= 150, "explanation too short"
-    low = expl.lower()
-    for term in ("coupled", "information", "robust", "morphological", "buckl"):
-        assert term in low, f"explanation missing required term {term!r}"
-    assert ("pareto" in low) or ("topsis" in low)
-    # Robust-vs-on-target distinction: the structured field
-    # `taguchi.most_robust_equals_best_on_target` already grades whether the agent
-    # got this right; the free-text check only needs evidence the distinction was
-    # discussed, so accept the natural range of ways to phrase "closest to the
-    # nominal target" rather than only the literal words "on-target"/"quality loss".
-    assert (
-        ("quality loss" in low)
-        or ("on-target" in low) or ("on target" in low) or ("on the target" in low)
-        or ("closest to the target" in low) or ("closest to target" in low)
-        or ("nearest the target" in low) or ("nearest to the target" in low)
-        or ("hits the target" in low) or ("hitting the target" in low)
-        or ("nominal-the-best" in low) or ("nominal the best" in low)
-    ), "explanation missing required robust-vs-on-target (quality-loss) content"
-    assert ("peen" in low) or ("treatment" in low)
-    assert ("residual" in low) or ("cte" in low) or ("thermal expansion" in low), \
-        "explanation missing required composite-CTE / thermal-residual-stress content"
-    assert ("surge" in low) or ("natural frequency" in low) or ("frequency margin" in low) or ("dynamic margin" in low), \
-        "explanation missing required natural-frequency / surge-margin content"
-    # Durability objective: instruction.md names Na as "durability" once (Quantities,
-    # final-selection stage) and asks the explanation to cover the three competing
-    # objectives (cost, durability, frequency margin) that stage trades off. Accept any
-    # of the ways an agent might refer to that objective, not only the literal word.
-    assert (
-        ("durab" in low) or (" na " in f" {low} ") or ("active coil" in low)
-        or ("coil count" in low) or ("coil-count" in low)
-    ) and (("dynamic" in low) or ("frequency" in low)), (
-        "explanation must address the final-selection stage's three competing objectives "
-        "(cost, durability/Na, frequency margin)"
-    )
-    # Fatigue-life philosophy: the structured field
-    # `parametric_optimization.frequency_alternative_fatigue_philosophy` already grades
-    # WHICH philosophy was chosen (see test_frequency_alternative). This free-text check
-    # only needs evidence the judgment call was named and discussed, not the exact
-    # compound word "fatigue-life" -- accept the standard equivalent phrasings a correct
-    # explanation would actually use.
-    assert any(term in low for term in (
-        "fatigue-life", "fatigue life", "fatigue criterion", "fatigue criteria",
-        "infinite-life", "infinite life", "finite-life", "finite life",
-        "endurance limit", "basquin",
-    )), (
-        "explanation must name the fatigue-life-philosophy judgment call for the "
-        "frequency-optimized alternative"
-    )
-    assert ("infinite" in low) or ("finite" in low), \
-        "explanation must state which fatigue-life philosophy (infinite- or finite-life) was chosen for the alternative"
-    assert "temper" in low, "explanation missing required heat-treatment (tempering) content"
 
 
 # ------------------------------------------------------------ 1. morphological
@@ -888,12 +842,11 @@ def test_synthesis_consistent_with_stage_results():
 
 
 def test_synthesis_addresses_method_disagreement():
-    # When TOPSIS and the weighted-sum method disagree (they do, on this
-    # dataset), the written explanation must say so explicitly rather than
-    # silently reporting one winner as if the two methods had agreed.
+    # The disagreement itself is graded structurally via pareto.methods_agree
+    # (see test_pareto_winners_and_agreement); the recommended final design must
+    # be one of the two winners (test_synthesis_consistent_with_stage_results).
+    # No keyword check on the prose.
     data = load_report()
-    par = data["pareto"]
-    if par["topsis_winner"] != par["weighted_sum_winner"]:
-        low = data["synthesis"]["explanation"].lower()
-        assert ("disagree" in low) or ("do not agree" in low) or ("does not agree" in low), \
-            "explanation must acknowledge that TOPSIS and the weighted-sum method disagree here"
+    assert data["pareto"]["methods_agree"] == (
+        data["pareto"]["topsis_winner"] == data["pareto"]["weighted_sum_winner"]
+    )

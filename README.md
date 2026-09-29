@@ -357,8 +357,8 @@ deliberately, not left at a library default:
   (about 0.6 dB for factor B), so rounding cannot be mistaken for a real effect.
 - Final-candidate feasibility (now against all eleven requirements, process-robustness
   included), the Pareto-optimal set (now over three objectives), and both multi-criteria
-  winners are checked individually, with a dedicated check that the explanation acknowledges
-  it when TOPSIS and the weighted-sum method disagree, and that the synthesis section's
+  winners are checked individually, with a structural check that `methods_agree` matches the two winners
+  (the prose is not keyword-graded), and that the synthesis section's
   final-design field is constrained to be whichever of the two winners the report itself
   settled on.
 
@@ -396,9 +396,8 @@ other and against a fresh recomputation from `taguchi_spring_robustness.csv` bef
 composite-density, natural-frequency, tempering-temperature, frequency-optimized-
 alternative, and frequency-alternative-fatigue-philosophy fields), and a findings.md
 coverage check (the five stages must all be mentioned by name); the synthesis explanation's
-required content and length (requiring surge/frequency-margin language, naming of the
-fatigue-life-philosophy judgment call, tempering-condition language, and coverage of all
-three final-selection objectives); per-stage checks against sealed ground truth for all five
+length only (no keyword gate: the structured fields grade the science, so a correct but
+differently-worded explanation cannot fail); per-stage checks against sealed ground truth for all five
 stages (morphological totals and best combination; axiomatic coupling classification, the
 coupled-design exclusion gate, information content, and the recommended design; the
 parametric optimum's cost, wire treatment, tempering condition (both checked exactly, the
@@ -413,8 +412,8 @@ against whichever fatigue-life philosophy the report claims to have used; Taguch
 signal-to-noise ratios, factor-level averages, the most-robust combination, the
 best-on-target run, and the robust-vs-on-target-are-different check; final-candidate
 feasibility under all eleven requirements (process-robustness included), the three-objective
-Pareto-optimal set, the TOPSIS/weighted-sum winners, and a dedicated check that a
-disagreement between them is acknowledged in the explanation); the eight recomputation
+Pareto-optimal set, the TOPSIS/weighted-sum winners, and a structural check that
+`methods_agree` is consistent with them); the eight recomputation
 checks described above; and a cross-field consistency check on the synthesis
 section.
 

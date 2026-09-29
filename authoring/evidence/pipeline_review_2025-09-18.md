@@ -41,3 +41,9 @@ Failure modes: specification completeness (7/8 trials); verifier correctness (8/
 ## Takeaway
 
 The pipeline flagged 8/8 trials. Every trial was scientifically correct, and every one failed only the single all-or-nothing `test_explanation_content` keyword gate. The task therefore measures whether the explanation contains the reference's wording, not the science.
+
+## Follow-up (author session)
+
+- Oracle re-run on current files: 36/36 with real pytest. Empty output: 0/36.
+- `test_explanation_content` reduced to a length check and the "disagree" keyword check replaced by a structural `methods_agree` consistency check. A report with correct numbers and a keyword-free 400-character explanation now passes 36/36.
+- The 8-trial run audit above predates these changes and the current `instruction.md` wording, so it must be rerun. Its 8/8 scientifically-correct results also mean the task is likely too easy once the gate is gone.
