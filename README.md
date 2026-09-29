@@ -407,7 +407,7 @@ other and against a fresh recomputation from `taguchi_spring_robustness.csv` bef
 
 ## Test suite
 
-36 checks in `tests/test_outputs.py`: file existence, required-field presence (including the
+37 checks in `tests/test_outputs.py`: file existence, required-field presence (including the
 composite-density, natural-frequency, tempering-temperature, frequency-optimized-
 alternative, and frequency-alternative-fatigue-philosophy fields), and a findings.md
 coverage check (the five stages must all be mentioned by name); the synthesis explanation's
@@ -435,4 +435,4 @@ section.
 `python3 authoring/provenance/generate_ground_truth.py` regenerates every dataset file
 that isn't already consistent with `tests/ground_truth.json` (idempotently), runs
 `solution/solve.py`, and grades the result with the exact checks in
-`tests/test_outputs.py`, in-process. A clean run ends `36/36 checks passed`.
+`tests/test_outputs.py`, in-process. A clean run ends `37/37 checks passed`.
